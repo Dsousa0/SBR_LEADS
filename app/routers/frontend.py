@@ -13,7 +13,7 @@ from database import get_db, SessionLocal
 from pedido_mobile import SyncError, sincronizar, sync_em_andamento, total_clientes, ultima_sync
 from routers.api import _UFS
 from schemas import BuscarRequest, Cnae, Municipio, Stats, UF
-from service import ATALHOS, buscar, buscar_para_mapa
+from service import ATALHOS, buscar, buscar_para_mapa, buscar_stats
 
 LIMITE_MAPA = 5000
 
@@ -184,6 +184,7 @@ async def buscar_html(
     req = _form_to_req(form, page=page, page_size=50)
 
     resultado = buscar(req, db)
+    stats_filtro = buscar_stats(req, db, resultado.total)
 
     leads_mapa = buscar_para_mapa(req, db, limite=LIMITE_MAPA)
     leads_json = json.dumps([{
@@ -234,6 +235,7 @@ async def buscar_html(
     return templates.TemplateResponse("partials/resultados.html", {
         "request": request,
         "resultado": resultado,
+        "stats_filtro": stats_filtro,
         "leads_json": leads_json,
         "pagina_json": pagina_json,
         "total_no_mapa": len(leads_mapa),

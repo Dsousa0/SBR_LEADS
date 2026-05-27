@@ -75,6 +75,14 @@ SELECT_LEADS = f"""
 
 _COUNT_SQL = f"SELECT COUNT(*) {_FROM_LEADS} WHERE {{where}}"
 
+_STATS_FILTRO_SQL = f"""
+    SELECT
+        COUNT(DISTINCT e.cnpj_basico)                                   AS empresas,
+        COUNT(CASE WHEN pm.documento IS NOT NULL THEN 1 END)            AS clientes
+    {_FROM_LEADS}
+    WHERE {{where}}
+"""
+
 # ---------------------------------------------------------------------------
 # Funções de negócio
 # ---------------------------------------------------------------------------
@@ -181,6 +189,22 @@ def contar(req: BuscarRequest, db: Session) -> int:
     return db.execute(
         text(_COUNT_SQL.format(where=where)), params
     ).scalar() or 0
+
+
+def buscar_stats(req: BuscarRequest, db: Session, total: int) -> dict:
+    """Retorna contagens derivadas do filtro atual para exibição nos cards."""
+    cnaes = resolve_cnaes(req)
+    where, params = build_where(req, cnaes)
+    row = db.execute(
+        text(_STATS_FILTRO_SQL.format(where=where)), params
+    ).fetchone()
+    clientes = row.clientes or 0
+    return {
+        "estabelecimentos": total,
+        "empresas": row.empresas or 0,
+        "clientes": clientes,
+        "prospectos": total - clientes,
+    }
 
 
 def buscar_para_mapa(req: BuscarRequest, db: Session, limite: int = 5000) -> list[Lead]:
