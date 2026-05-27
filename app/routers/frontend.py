@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -266,6 +267,48 @@ async def exportar_xlsx_form(
     form = await request.form()
     req = _form_to_req(form)
     return exportar_xlsx(req, db)
+
+
+@router.get("/pedidos/{cnpj}", response_class=HTMLResponse)
+def pedidos_cliente(
+    cnpj: str,
+    request: Request,
+    current_user: dict = Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    doc = re.sub(r"\D", "", cnpj)
+    pedido_rows = db.execute(
+        text("""
+            SELECT pedido_numero, emissao, situacao, vendedor,
+                   total_liquido, total_bruto, orcamento,
+                   tabela_preco, plano_pagamento,
+                   desconto1, desconto2, desconto3
+            FROM pedido_mobile_pedido
+            WHERE cliente_documento = :doc
+            ORDER BY emissao DESC, pedido_numero DESC
+        """),
+        {"doc": doc},
+    ).fetchall()
+
+    pedidos = []
+    for p in pedido_rows:
+        itens = db.execute(
+            text("""
+                SELECT produto_codigo, produto_descricao, produto_unidade,
+                       quantidade, preco_unitario, desconto, total_liquido,
+                       informacoes_adicionais
+                FROM pedido_mobile_item
+                WHERE pedido_numero = :n
+                ORDER BY id
+            """),
+            {"n": p.pedido_numero},
+        ).fetchall()
+        pedidos.append({"pedido": p, "itens": itens})
+
+    return templates.TemplateResponse("partials/pedidos_cliente.html", {
+        "request": request,
+        "pedidos": pedidos,
+    })
 
 
 def _form_to_req(form, *, page: int = 1, page_size: int = 50) -> BuscarRequest:

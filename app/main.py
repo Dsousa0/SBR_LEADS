@@ -71,6 +71,49 @@ def _bootstrap_usuarios():
                 valor TEXT NOT NULL
             )
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS pedido_mobile_pedido (
+                pedido_numero     INTEGER PRIMARY KEY,
+                cliente_documento VARCHAR(20) NOT NULL,
+                vendedor          VARCHAR(100),
+                representada      VARCHAR(200),
+                tabela_preco      VARCHAR(100),
+                plano_pagamento   VARCHAR(200),
+                desconto1         DECIMAL(10,4) DEFAULT 0,
+                desconto2         DECIMAL(10,4) DEFAULT 0,
+                desconto3         DECIMAL(10,4) DEFAULT 0,
+                emissao           DATE,
+                entrega           DATE,
+                situacao          VARCHAR(50),
+                orcamento         BOOLEAN DEFAULT false,
+                total_bruto       DECIMAL(12,2),
+                total_liquido     DECIMAL(12,2),
+                atualizado_em     TIMESTAMP DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS pedido_mobile_item (
+                id                    SERIAL PRIMARY KEY,
+                pedido_numero         INTEGER NOT NULL
+                    REFERENCES pedido_mobile_pedido(pedido_numero) ON DELETE CASCADE,
+                produto_codigo        VARCHAR(50),
+                produto_descricao     VARCHAR(300),
+                produto_unidade       VARCHAR(10),
+                quantidade            DECIMAL(12,4),
+                preco_unitario        DECIMAL(12,4),
+                desconto              DECIMAL(10,4) DEFAULT 0,
+                total_liquido         DECIMAL(12,2),
+                informacoes_adicionais TEXT
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_pm_pedido_cliente
+            ON pedido_mobile_pedido(cliente_documento)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_pm_item_pedido
+            ON pedido_mobile_item(pedido_numero)
+        """))
         conn.commit()
 
         count = conn.execute(text("SELECT COUNT(*) FROM usuario")).scalar()

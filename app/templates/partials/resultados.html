@@ -291,6 +291,12 @@
       </button>
     </div>
     <div class="p-6 space-y-5" id="modal-body"></div>
+    <div id="modal-pedidos-section" class="hidden border-t border-[#2e2e2e]">
+      <div class="px-6 pt-4 pb-2">
+        <div class="text-[10px] font-semibold text-[#555] uppercase tracking-wider">Pedidos</div>
+      </div>
+      <div id="modal-pedidos" class="px-6 pb-6"></div>
+    </div>
   </div>
 </div>
 
@@ -687,6 +693,21 @@ window.abrirModalCliente = function(lead) {
       ultimaCompra ? _linha('Última compra', ultimaCompra) : '',
     ]) : '',
   ].join('');
+
+  const pedidosSection = document.getElementById('modal-pedidos-section');
+  const pedidosEl = document.getElementById('modal-pedidos');
+  if (pedidosSection && pedidosEl) {
+    if (lead.eh_cliente) {
+      pedidosSection.classList.remove('hidden');
+      pedidosEl.innerHTML = '<div class="py-4 text-center text-[#555] text-xs">Carregando pedidos…</div>';
+      htmx.ajax('GET', '/pedidos/' + encodeURIComponent(lead.cnpj), {
+        target: '#modal-pedidos', swap: 'innerHTML',
+      });
+    } else {
+      pedidosSection.classList.add('hidden');
+      pedidosEl.innerHTML = '';
+    }
+  }
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');

@@ -147,6 +147,57 @@ _UPDATE_ULTIMA_COMPRA = text("""
        AND (ultima_compra_em IS NULL OR ultima_compra_em < :data)
 """)
 
+_UPSERT_PEDIDO_SQL = text("""
+    INSERT INTO pedido_mobile_pedido (
+        pedido_numero, cliente_documento, vendedor, representada,
+        tabela_preco, plano_pagamento,
+        desconto1, desconto2, desconto3,
+        emissao, entrega, situacao, orcamento,
+        total_bruto, total_liquido, atualizado_em
+    ) VALUES (
+        :numero, :documento, :vendedor, :representada,
+        :tabela, :plano,
+        :desconto1, :desconto2, :desconto3,
+        :emissao, :entrega, :situacao, :orcamento,
+        :total_bruto, :total_liquido, NOW()
+    )
+    ON CONFLICT (pedido_numero) DO UPDATE SET
+        cliente_documento = EXCLUDED.cliente_documento,
+        vendedor          = EXCLUDED.vendedor,
+        representada      = EXCLUDED.representada,
+        tabela_preco      = EXCLUDED.tabela_preco,
+        plano_pagamento   = EXCLUDED.plano_pagamento,
+        desconto1         = EXCLUDED.desconto1,
+        desconto2         = EXCLUDED.desconto2,
+        desconto3         = EXCLUDED.desconto3,
+        emissao           = EXCLUDED.emissao,
+        entrega           = EXCLUDED.entrega,
+        situacao          = EXCLUDED.situacao,
+        orcamento         = EXCLUDED.orcamento,
+        total_bruto       = EXCLUDED.total_bruto,
+        total_liquido     = EXCLUDED.total_liquido,
+        atualizado_em     = NOW()
+""")
+
+_INSERT_ITEM_SQL = text("""
+    INSERT INTO pedido_mobile_item (
+        pedido_numero, produto_codigo, produto_descricao, produto_unidade,
+        quantidade, preco_unitario, desconto, total_liquido, informacoes_adicionais
+    ) VALUES (
+        :numero, :codigo, :descricao, :unidade,
+        :quantidade, :preco_unitario, :desconto, :total_liquido, :info
+    )
+""")
+
+
+def _parse_date(s: str | None):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date()
+    except ValueError:
+        return None
+
 
 def _sincronizar_pedidos(db: Session) -> None:
     """Percorre pedidointegracao/versao e atualiza ultima_compra_em por cliente.
@@ -183,14 +234,47 @@ def _sincronizar_pedidos(db: Session) -> None:
 
         for pedido in pedidos:
             doc = _normalizar_documento(pedido.get("clienteDocumento"))
-            emissao_str = pedido.get("pedidoEmissao")
-            if not doc or not emissao_str:
+            emissao = _parse_date(pedido.get("pedidoEmissao"))
+            if not doc or not emissao:
                 continue
-            try:
-                data_compra = datetime.strptime(emissao_str, "%d/%m/%Y").date()
-            except ValueError:
+
+            db.execute(_UPDATE_ULTIMA_COMPRA, {"documento": doc, "data": emissao})
+
+            numero = pedido.get("pedidoNumero")
+            if numero is None:
                 continue
-            db.execute(_UPDATE_ULTIMA_COMPRA, {"documento": doc, "data": data_compra})
+
+            db.execute(_UPSERT_PEDIDO_SQL, {
+                "numero":       numero,
+                "documento":    doc,
+                "vendedor":     (pedido.get("pedidoVendedor") or "")[:100] or None,
+                "representada": (pedido.get("pedidoRepresentada") or "")[:200] or None,
+                "tabela":       (pedido.get("pedidoTabela") or "")[:100] or None,
+                "plano":        (pedido.get("pedidoPlano") or "")[:200] or None,
+                "desconto1":    pedido.get("pedidoDesconto1") or 0,
+                "desconto2":    pedido.get("pedidoDesconto2") or 0,
+                "desconto3":    pedido.get("pedidoDesconto3") or 0,
+                "emissao":      emissao,
+                "entrega":      _parse_date(pedido.get("pedidoEntrega")),
+                "situacao":     (pedido.get("pedidoSituacao") or "")[:50] or None,
+                "orcamento":    bool(pedido.get("pedidoOrcamento")),
+                "total_bruto":  pedido.get("pedidoTotalBruto"),
+                "total_liquido":pedido.get("pedidoTotalLiquido"),
+            })
+
+            db.execute(text("DELETE FROM pedido_mobile_item WHERE pedido_numero = :n"), {"n": numero})
+            for item in (pedido.get("itemList") or []):
+                db.execute(_INSERT_ITEM_SQL, {
+                    "numero":        numero,
+                    "codigo":        (item.get("produtoCodigo") or "")[:50] or None,
+                    "descricao":     (item.get("produtoDescricao") or "")[:300] or None,
+                    "unidade":       (item.get("produtoUnidade") or "")[:10] or None,
+                    "quantidade":    item.get("quantidade"),
+                    "preco_unitario":item.get("precoUnitario"),
+                    "desconto":      item.get("desconto") or 0,
+                    "total_liquido": item.get("totalLiquido"),
+                    "info":          item.get("informacoesAdicionais"),
+                })
 
         db.commit()
         logger.info("Pedidos: página %d/%d processada", page, total_paginas)
