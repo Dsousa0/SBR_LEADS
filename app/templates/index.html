@@ -75,6 +75,23 @@
           </select>
         </div>
 
+        <!-- Produto comprado -->
+        <div class="flex-1 min-w-[220px] relative" id="div-produto">
+          <label class="block text-xs font-medium text-[#888] mb-1 uppercase tracking-wide">Produto comprado</label>
+          <input type="text" id="produto-busca" name="q"
+                 placeholder="Buscar produto..."
+                 autocomplete="off"
+                 hx-get="/produtos-options"
+                 hx-target="#produto-dropdown"
+                 hx-trigger="input changed delay:300ms"
+                 class="w-full rounded-lg bg-[#222] border border-[#3a3a3a] px-3 py-2 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500 transition-colors" />
+          <div id="produto-dropdown"
+               class="absolute top-full left-0 right-0 z-40 mt-1 bg-[#1a1a1a] border border-[#3a3a3a] rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto empty:hidden">
+          </div>
+          <div id="produtos-tags" class="flex flex-wrap gap-1 mt-1.5 min-h-0"></div>
+          <input type="hidden" name="produtos_codigos" id="produtos-codigos-hidden" value="" />
+        </div>
+
         <!-- Apenas ativas + Buscar -->
         <div class="flex items-center gap-4 flex-shrink-0">
           <label class="flex items-center gap-2 cursor-pointer">
@@ -150,5 +167,50 @@ function exportar(formato) {
       URL.revokeObjectURL(url);
     });
 }
+
+// ---- Filtro de produto ----
+const _produtosSelecionados = {};
+
+window.selecionarProduto = function(codigo, descricao) {
+  if (_produtosSelecionados[codigo]) return;
+  _produtosSelecionados[codigo] = descricao;
+  _renderProdutos();
+  document.getElementById('produto-busca').value = '';
+  document.getElementById('produto-dropdown').innerHTML = '';
+};
+
+window.removerProduto = function(codigo) {
+  delete _produtosSelecionados[codigo];
+  _renderProdutos();
+};
+
+function _esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _renderProdutos() {
+  const tags = document.getElementById('produtos-tags');
+  const hidden = document.getElementById('produtos-codigos-hidden');
+  const entries = Object.entries(_produtosSelecionados);
+  tags.innerHTML = entries.map(([cod, desc]) => {
+    const label = desc.length > 32 ? desc.slice(0, 32) + '…' : desc;
+    const safeCod = cod.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/30 font-medium">
+      ${_esc(label)}
+      <button type="button" onclick="removerProduto('${safeCod}')"
+              class="ml-0.5 text-orange-400/60 hover:text-orange-300 leading-none text-sm font-bold">×</button>
+    </span>`;
+  }).join('');
+  hidden.value = Object.keys(_produtosSelecionados).join(',');
+}
+
+// Fechar dropdown ao clicar fora
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('produto-dropdown');
+  const inp = document.getElementById('produto-busca');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) {
+    dd.innerHTML = '';
+  }
+});
 </script>
 {% endblock %}

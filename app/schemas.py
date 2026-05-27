@@ -32,6 +32,7 @@ class BuscarRequest(BaseModel):
     apenas_ativas: bool = True
     porte: str | None = None  # 01=MEI, 03=ME, 05=EPP, 99=Demais
     status_cliente: str | None = None  # None=todos, "cliente", "prospect"
+    produtos_codigos: list[str] | None = None
     page: int = 1
     page_size: int = 50
     ordenar: str = "razao_social_asc"

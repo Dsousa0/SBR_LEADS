@@ -141,6 +141,18 @@ def build_where(req: BuscarRequest, cnaes: list[str] | None) -> tuple[str, dict]
     elif req.status_cliente == "prospect":
         conditions.append("pm.documento IS NULL")
 
+    if req.produtos_codigos:
+        conditions.append("""
+            EXISTS (
+                SELECT 1
+                FROM pedido_mobile_pedido ped
+                JOIN pedido_mobile_item pit ON pit.pedido_numero = ped.pedido_numero
+                WHERE ped.cliente_documento = e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv
+                  AND pit.produto_codigo = ANY(:produtos_codigos)
+            )
+        """)
+        params["produtos_codigos"] = req.produtos_codigos
+
     return " AND ".join(conditions), params
 
 

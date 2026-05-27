@@ -154,6 +154,32 @@ def municipios_options(
     })
 
 
+@router.get("/produtos-options", response_class=HTMLResponse)
+def produtos_options(
+    request: Request,
+    q: str = "",
+    current_user: dict = Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    produtos = []
+    if q.strip():
+        rows = db.execute(
+            text("""
+                SELECT DISTINCT ON (produto_codigo) produto_codigo, produto_descricao
+                FROM pedido_mobile_item
+                WHERE produto_descricao ILIKE :q OR produto_codigo ILIKE :q
+                ORDER BY produto_codigo, produto_descricao
+                LIMIT 10
+            """),
+            {"q": f"%{q}%"},
+        ).fetchall()
+        produtos = [{"codigo": r.produto_codigo, "descricao": r.produto_descricao} for r in rows]
+    return templates.TemplateResponse("partials/produtos_options.html", {
+        "request": request,
+        "produtos": produtos,
+    })
+
+
 @router.get("/cnaes-options", response_class=HTMLResponse)
 def cnaes_options(
     request: Request,
@@ -313,6 +339,7 @@ def pedidos_cliente(
 
 def _form_to_req(form, *, page: int = 1, page_size: int = 50) -> BuscarRequest:
     cnaes_raw = form.get("cnaes") or ""
+    produtos_raw = form.get("produtos_codigos") or ""
     return BuscarRequest(
         uf=form.get("uf") or None,
         municipio_codigo=form.get("municipio_codigo") or None,
@@ -321,6 +348,7 @@ def _form_to_req(form, *, page: int = 1, page_size: int = 50) -> BuscarRequest:
         apenas_ativas=form.get("apenas_ativas") == "true",
         porte=form.get("porte") or None,
         status_cliente=form.get("status_cliente") or None,
+        produtos_codigos=[c.strip() for c in produtos_raw.split(",") if c.strip()] if produtos_raw else None,
         ordenar=form.get("ordenar") or "razao_social_asc",
         page=page,
         page_size=page_size,

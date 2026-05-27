@@ -1,0 +1,8 @@
+{% for p in produtos %}
+<button type="button"
+        onclick="selecionarProduto('{{ p.codigo | replace("'", "\\'") }}', '{{ p.descricao | replace("'", "\\'") }}')"
+        class="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-[#2e2e2e] hover:text-orange-500 border border-transparent hover:border-[#3a3a3a] transition-colors truncate">
+  <span class="font-mono text-[#555]">{{ p.codigo }}</span>
+  <span class="ml-1 text-[#aaa]">{{ p.descricao }}</span>
+</button>
+{% endfor %}
