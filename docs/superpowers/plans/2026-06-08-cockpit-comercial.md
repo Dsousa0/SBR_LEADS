@@ -888,6 +888,22 @@ def test_serie_temporal_agrupa_por_dia(db):
     assert receitas.get("06/06") == 500.0
 
 
+def test_serie_inclui_comparacao_alinhada_por_offset(db):
+    _seed(db)
+    f = FiltrosDashboard.from_query(
+        {"inicio": "2026-06-01", "fim": "2026-06-30", "comparacao": "mes_anterior"},
+        hoje=date(2026, 6, 8),
+    )
+    serie = svc.serie_temporal(db, f)
+    por_rotulo = {p["rotulo"]: p for p in serie}
+    # 10/06 não tem venda no período atual, mas o comparado (10/05) tem 300
+    assert por_rotulo["10/06"]["receita"] == 0.0
+    assert por_rotulo["10/06"]["receita_cmp"] == 300.0
+    # 05/06 vende 1000; comparado (05/05) não tem nada
+    assert por_rotulo["05/06"]["receita"] == 1000.0
+    assert por_rotulo["05/06"]["receita_cmp"] == 0.0
+
+
 def test_top_representadas(db):
     _seed(db)
     f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
@@ -906,25 +922,57 @@ Expected: FAIL.
 Acrescentar em `app/dashboard_service.py`:
 
 ```python
+from datetime import timedelta
+
+from dashboard_filters import _shift_meses
+
+
+def _coletar_serie(db, where, params, ini, fim, por_mes):
+    """Série DENSA (inclui buckets sem venda) entre ini e fim. Lista de (rotulo, receita, pedidos)."""
+    if por_mes:
+        rows = db.execute(text(f"""
+            SELECT date_trunc('month', ped.emissao)::date AS b,
+                   SUM(ped.total_liquido) AS receita, COUNT(*) AS pedidos
+            FROM pedido_mobile_pedido ped WHERE {where}
+            GROUP BY 1
+        """), params).fetchall()
+        mapa = {r.b: (float(r.receita or 0), int(r.pedidos)) for r in rows}
+        out, cur = [], ini.replace(day=1)
+        while cur <= fim:
+            rec, ped = mapa.get(cur, (0.0, 0))
+            out.append((cur.strftime("%m/%Y"), rec, ped))
+            cur = _shift_meses(cur, 1)
+        return out
+    rows = db.execute(text(f"""
+        SELECT ped.emissao AS b, SUM(ped.total_liquido) AS receita, COUNT(*) AS pedidos
+        FROM pedido_mobile_pedido ped WHERE {where}
+        GROUP BY ped.emissao
+    """), params).fetchall()
+    mapa = {r.b: (float(r.receita or 0), int(r.pedidos)) for r in rows}
+    out, cur = [], ini
+    while cur <= fim:
+        rec, ped = mapa.get(cur, (0.0, 0))
+        out.append((cur.strftime("%d/%m"), rec, ped))
+        cur = cur + timedelta(days=1)
+    return out
+
+
 def serie_temporal(db: Session, f: FiltrosDashboard) -> list[dict]:
     where, params = build_where(f)
-    dias = (f.fim - f.inicio).days
-    # granularidade: dia até ~62d, senão mês
-    if dias <= 62:
-        bucket, fmt = "day", "DD/MM"
-    else:
-        bucket, fmt = "month", "MM/YYYY"
-    rows = db.execute(text(f"""
-        SELECT TO_CHAR(date_trunc('{bucket}', ped.emissao), '{fmt}') AS rotulo,
-               date_trunc('{bucket}', ped.emissao) AS ord,
-               SUM(ped.total_liquido) AS receita,
-               COUNT(*) AS pedidos
-        FROM pedido_mobile_pedido ped
-        WHERE {where}
-        GROUP BY date_trunc('{bucket}', ped.emissao)
-        ORDER BY ord
-    """), params).fetchall()
-    return [{"rotulo": r.rotulo, "receita": float(r.receita or 0), "pedidos": int(r.pedidos)} for r in rows]
+    por_mes = (f.fim - f.inicio).days > 62
+
+    atual = _coletar_serie(db, where, params, f.inicio, f.fim, por_mes)
+
+    cmp = derivar_comparacao(f)
+    comparado = None
+    if cmp:
+        comparado = _coletar_serie(db, where, {**params, "inicio": cmp[0], "fim": cmp[1]}, cmp[0], cmp[1], por_mes)
+
+    pontos = []
+    for i, (rotulo, receita, pedidos) in enumerate(atual):
+        receita_cmp = comparado[i][1] if comparado and i < len(comparado) else None
+        pontos.append({"rotulo": rotulo, "receita": receita, "pedidos": pedidos, "receita_cmp": receita_cmp})
+    return pontos
 
 
 def top_dimensao(db: Session, f: FiltrosDashboard, *, dimensao: str, limite: int = 10) -> list[dict]:
@@ -1277,15 +1325,20 @@ Create `app/templates/partials/dashboard_paineis.html`. Renderiza KPIs, série (
   <script>
     (function () {
       const serie = {{ dados.serie | tojson }};
+      const temCmp = serie.some(p => p.receita_cmp !== null && p.receita_cmp !== undefined);
       const el = document.getElementById('chartSerie');
       if (el && window.Chart) {
         if (el._chart) el._chart.destroy();
+        const datasets = [{ type: 'bar', label: 'Período', data: serie.map(p => p.receita),
+                            backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 4 }];
+        if (temCmp) {
+          datasets.push({ type: 'line', label: 'Comparado', data: serie.map(p => p.receita_cmp),
+                          borderColor: '#60a5fa', borderDash: [5, 4], backgroundColor: 'transparent',
+                          pointRadius: 0, tension: 0.3 });
+        }
         el._chart = new Chart(el, {
-          type: 'bar',
-          data: { labels: serie.map(p => p.rotulo),
-                  datasets: [{ data: serie.map(p => p.receita),
-                               backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 4 }] },
-          options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+          data: { labels: serie.map(p => p.rotulo), datasets },
+          options: { maintainAspectRatio: false, plugins: { legend: { display: temCmp } } }
         });
       }
     })();
@@ -1442,5 +1495,5 @@ git push origin main
 - **Sempre** parametrizar valores de filtro (`:vendedor`, `:inicio`, …); nunca interpolar valor de usuário na string SQL. Nomes de bucket/format da série (`day`/`month`, `DD/MM`) são literais controlados pelo código, não entrada de usuário.
 - O `cmp_inicio`/`cmp_fim` só aparecem na UI quando `comparacao = personalizado` (refinamento de UI pode ser feito após a Fase 1 — o backend já suporta).
 - Estados vazios: as tabelas Jinja já iteram listas vazias sem quebrar; KPIs com base 0 retornam `delta_pct = None` e a UI omite a seta.
-- **Desvio consciente do spec — linha de comparação na série temporal:** o mockup mostrava uma linha pontilhada do período comparado sobre o gráfico de faturamento. Neste plano a série traz **apenas o período atual** (as barras); a comparação fica carregada pelos KPIs (▲▼). Motivo: alinhar dois períodos de tamanhos diferentes na mesma escala temporal agrega complexidade desproporcional ao valor na Fase 1. A série já retorna pontos estruturados — adicionar um `dataset` de linha depois é incremental. **Pendente decisão do usuário** no handoff: incluir agora ou deixar para a Fase 2.
+- **Série com comparação (incluída na Fase 1, por decisão do usuário):** a série é DENSA (inclui dias/meses sem venda) e a comparação é alinhada por **deslocamento de bucket** (offset de dia/mês a partir do início de cada período), não por índice de buckets não-vazios — isso evita o desalinhamento quando há lacunas. O gráfico sobrepõe uma linha pontilhada (`receita_cmp`) quando há comparação.
 - Após a Fase 1 validada em produção, retomar pelo roadmap (Fase 2 — visão analítica).
