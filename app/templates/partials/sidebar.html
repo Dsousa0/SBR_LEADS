@@ -18,6 +18,7 @@
   <nav class="flex-1 px-2 space-y-1 overflow-y-auto">
     {{ item('/inicio', '🏠', 'Início', path == '/inicio') }}
     {{ item('/', '🔎', 'Busca de Leads', path == '/') }}
+    {{ item('/mapa', '🗺️', 'Mapa', path == '/mapa') }}
     {{ item('/dashboards', '📊', 'Dashboards', path.startswith('/dashboard')) }}
     <div class="h-px bg-[#1e1e1e] my-2 mx-2"></div>
     <div class="text-[9px] uppercase tracking-wider text-[#444] px-3 py-1">Administração</div>
