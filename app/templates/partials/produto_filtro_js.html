@@ -1,0 +1,122 @@
+<script>
+// ---- Filtro de produto ----
+const _produtosSelecionados = {};
+let _menuAberto = false;
+
+function _esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _abrirDropdown() {
+  const dd = document.getElementById('produto-dropdown');
+  const ico = document.getElementById('ico-menu-produto');
+  if (!dd) return;
+  dd.classList.remove('hidden');
+  if (ico) ico.style.transform = 'rotate(180deg)';
+  _menuAberto = true;
+}
+
+function _fecharDropdown() {
+  const dd = document.getElementById('produto-dropdown');
+  const ico = document.getElementById('ico-menu-produto');
+  if (!dd) return;
+  dd.classList.add('hidden');
+  if (ico) ico.style.transform = '';
+  _menuAberto = false;
+}
+
+// Abre o menu e carrega os produtos mais pedidos
+window.toggleMenuProdutos = function() {
+  if (_menuAberto) { _fecharDropdown(); return; }
+  const dd = document.getElementById('produto-dropdown');
+  if (!dd) return;
+  const inp = document.getElementById('produto-busca');
+  if (inp) inp.value = '';
+  htmx.ajax('GET', '/produtos-options', { target: '#produto-dropdown', swap: 'innerHTML' });
+  _abrirDropdown();
+  _atualizarChecks();
+};
+
+window.selecionarProduto = function(codigo, descricao) {
+  if (_produtosSelecionados[codigo]) {
+    delete _produtosSelecionados[codigo];
+  } else {
+    _produtosSelecionados[codigo] = descricao;
+  }
+  _renderProdutos();
+  _atualizarChecks();
+};
+
+window.removerProduto = function(codigo) {
+  delete _produtosSelecionados[codigo];
+  _renderProdutos();
+  _atualizarChecks();
+};
+
+// Marca visualmente os itens já selecionados no dropdown
+function _atualizarChecks() {
+  document.querySelectorAll('#produto-dropdown .produto-option').forEach(btn => {
+    const cod = btn.dataset.codigo;
+    const selecionado = !!_produtosSelecionados[cod];
+    const check = btn.querySelector('.produto-check');
+    if (check) check.style.opacity = selecionado ? '1' : '0';
+    btn.classList.toggle('bg-orange-500/10', selecionado);
+    btn.classList.toggle('text-orange-400', selecionado);
+  });
+}
+
+function _renderProdutos() {
+  const placeholder = document.getElementById('produtos-placeholder');
+  const hidden = document.getElementById('produtos-codigos-hidden');
+  const container = placeholder?.parentElement;
+  if (!container) return;
+
+  const entries = Object.entries(_produtosSelecionados);
+  // Remove chips existentes (mantém o placeholder)
+  container.querySelectorAll('.produto-chip').forEach(el => el.remove());
+
+  if (entries.length === 0) {
+    if (placeholder) placeholder.style.display = '';
+  } else {
+    if (placeholder) placeholder.style.display = 'none';
+    entries.forEach(([cod, desc]) => {
+      const label = desc.length > 30 ? desc.slice(0, 30) + '…' : desc;
+      const safeCod = cod.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const chip = document.createElement('span');
+      chip.className = 'produto-chip inline-flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/25 font-medium';
+      chip.innerHTML = `${_esc(label)}<button type="button" onclick="removerProduto('${safeCod}')" class="ml-1 text-orange-400/50 hover:text-orange-300 leading-none font-bold text-xs">×</button>`;
+      container.insertBefore(chip, placeholder);
+    });
+  }
+
+  hidden.value = Object.keys(_produtosSelecionados).join(',');
+}
+
+// Após HTMX carregar o dropdown, aplica os estados de seleção
+document.addEventListener('htmx:afterSettle', function(e) {
+  if (e.detail.target && e.detail.target.id === 'produto-dropdown') {
+    _abrirDropdown();
+    _atualizarChecks();
+  }
+});
+
+// Abre o menu ao focar o input (sem valor)
+document.addEventListener('DOMContentLoaded', function() {
+  const inp = document.getElementById('produto-busca');
+  if (!inp) return;
+  inp.addEventListener('focus', function() {
+    if (!_menuAberto) {
+      htmx.ajax('GET', '/produtos-options', { target: '#produto-dropdown', swap: 'innerHTML' });
+    }
+  });
+});
+
+// Fechar ao clicar fora
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('produto-dropdown');
+  const wrapper = document.getElementById('div-produto');
+  if (dd && wrapper && !wrapper.contains(e.target)) {
+    _fecharDropdown();
+  }
+});
+</script>
