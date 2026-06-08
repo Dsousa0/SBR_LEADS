@@ -13,7 +13,7 @@ from database import get_db, SessionLocal
 from pedido_mobile import SyncError, sincronizar, sync_em_andamento
 from routers.api import _UFS
 from schemas import BuscarRequest, Cnae, Municipio, UF
-from service import ATALHOS, buscar, buscar_para_mapa, buscar_stats
+from service import ATALHOS, buscar, buscar_para_mapa, buscar_stats, contar
 
 LIMITE_MAPA = 5000
 
@@ -33,20 +33,93 @@ templates = Jinja2Templates(directory="templates")
 router = APIRouter()
 
 
+def _pagina_json(items) -> str:
+    """JSON dos leads da página atual — consumido pelo modal de detalhes."""
+    return json.dumps([{
+        "cnpj": l.cnpj, "razao_social": l.razao_social, "nome_fantasia": l.nome_fantasia,
+        "cnae_principal": l.cnae_principal, "cnae_descricao": l.cnae_descricao,
+        "tipo_logradouro": l.tipo_logradouro, "logradouro": l.logradouro, "numero": l.numero,
+        "complemento": l.complemento, "bairro": l.bairro, "cep": l.cep, "uf": l.uf,
+        "municipio": l.municipio, "ddd_1": l.ddd_1, "telefone_1": l.telefone_1,
+        "ddd_2": l.ddd_2, "telefone_2": l.telefone_2, "email": l.email,
+        "situacao": l.situacao, "porte": l.porte, "capital_social": l.capital_social,
+        "eh_cliente": l.eh_cliente, "vendedor": l.vendedor,
+        "ultima_compra_em": l.ultima_compra_em.strftime("%d/%m/%Y") if l.ultima_compra_em else None,
+        "dias_sem_compra": l.dias_sem_compra,
+    } for l in items], ensure_ascii=False).replace("</", "<\\/")
+
+
+def _leads_mapa_json(leads) -> str:
+    """JSON enxuto dos leads — consumido pelos marcadores do mapa."""
+    return json.dumps([{
+        "cnpj": l.cnpj, "razao_social": l.razao_social, "nome_fantasia": l.nome_fantasia,
+        "logradouro": l.logradouro, "tipo_logradouro": l.tipo_logradouro, "numero": l.numero,
+        "municipio": l.municipio, "uf": l.uf, "cep": l.cep, "ddd_1": l.ddd_1,
+        "telefone_1": l.telefone_1, "eh_cliente": l.eh_cliente, "vendedor": l.vendedor,
+    } for l in leads], ensure_ascii=False).replace("</", "<\\/")
+
+
 @router.get("/", response_class=HTMLResponse)
-def pagina_inicial(
+def busca(
     request: Request,
     current_user: dict = Depends(require_login),
     db: Session = Depends(get_db),
 ):
     ufs = [UF(sigla=s, nome=n) for s, n in _UFS]
     atalhos_view = [{"segmento": a["segmento"], "descricao": a["descricao"]} for a in ATALHOS]
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "user": current_user,
-        "ufs": ufs,
-        "atalhos": atalhos_view,
+    ctx = {"request": request, "user": current_user, "ufs": ufs, "atalhos": atalhos_view}
+
+    if not request.query_params:
+        ctx["resultado"] = None
+        return templates.TemplateResponse("index.html", ctx)
+
+    page = max(1, int(request.query_params.get("page") or 1))
+    req = _form_to_req(request.query_params, page=page)
+    resultado = buscar(req, db)
+    stats_filtro = buscar_stats(req, db, resultado.total)
+
+    ctx.update({
+        "resultado": resultado,
+        "stats_filtro": stats_filtro,
+        "ordenar_atual": req.ordenar,
+        "querystring": str(request.url.query),
+        "pagina_json": _pagina_json(resultado.items),
     })
+
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse("partials/busca_resultados.html", ctx)
+    return templates.TemplateResponse("index.html", ctx)
+
+
+@router.get("/mapa", response_class=HTMLResponse)
+def mapa(
+    request: Request,
+    current_user: dict = Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    ufs = [UF(sigla=s, nome=n) for s, n in _UFS]
+    atalhos_view = [{"segmento": a["segmento"], "descricao": a["descricao"]} for a in ATALHOS]
+    ctx = {"request": request, "user": current_user, "ufs": ufs, "atalhos": atalhos_view}
+
+    if not request.query_params:
+        return templates.TemplateResponse("mapa.html", ctx)
+
+    req = _form_to_req(request.query_params)
+    leads_mapa = buscar_para_mapa(req, db, limite=LIMITE_MAPA)
+    total = contar(req, db)
+    stats_filtro = buscar_stats(req, db, total)
+
+    ctx.update({
+        "stats_filtro": stats_filtro,
+        "resultado_total": total,
+        "querystring": str(request.url.query),
+        "total_no_mapa": len(leads_mapa),
+        "leads_json": _leads_mapa_json(leads_mapa),
+    })
+
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse("partials/mapa_painel.html", ctx)
+    return templates.TemplateResponse("mapa.html", ctx)
 
 
 @router.post("/sync-clientes", response_class=HTMLResponse)
@@ -178,77 +251,6 @@ def cnaes_options(
     return templates.TemplateResponse("partials/cnaes_options.html", {
         "request": request,
         "cnaes": cnaes,
-    })
-
-
-@router.post("/buscar", response_class=HTMLResponse)
-async def buscar_html(
-    request: Request,
-    current_user: dict = Depends(require_login),
-    db: Session = Depends(get_db),
-):
-    form = await request.form()
-    page = int(form.get("page") or 1)
-    req = _form_to_req(form, page=page, page_size=50)
-
-    resultado = buscar(req, db)
-    stats_filtro = buscar_stats(req, db, resultado.total)
-
-    leads_mapa = buscar_para_mapa(req, db, limite=LIMITE_MAPA)
-    leads_json = json.dumps([{
-        "cnpj": l.cnpj,
-        "razao_social": l.razao_social,
-        "nome_fantasia": l.nome_fantasia,
-        "logradouro": l.logradouro,
-        "tipo_logradouro": l.tipo_logradouro,
-        "numero": l.numero,
-        "municipio": l.municipio,
-        "uf": l.uf,
-        "cep": l.cep,
-        "ddd_1": l.ddd_1,
-        "telefone_1": l.telefone_1,
-        "eh_cliente": l.eh_cliente,
-        "vendedor": l.vendedor,
-    } for l in leads_mapa], ensure_ascii=False).replace("</", "<\\/")
-
-    # JSON completo dos leads da página atual — usado pelo modal de detalhes
-    pagina_json = json.dumps([{
-        "cnpj": l.cnpj,
-        "razao_social": l.razao_social,
-        "nome_fantasia": l.nome_fantasia,
-        "cnae_principal": l.cnae_principal,
-        "cnae_descricao": l.cnae_descricao,
-        "tipo_logradouro": l.tipo_logradouro,
-        "logradouro": l.logradouro,
-        "numero": l.numero,
-        "complemento": l.complemento,
-        "bairro": l.bairro,
-        "cep": l.cep,
-        "uf": l.uf,
-        "municipio": l.municipio,
-        "ddd_1": l.ddd_1,
-        "telefone_1": l.telefone_1,
-        "ddd_2": l.ddd_2,
-        "telefone_2": l.telefone_2,
-        "email": l.email,
-        "situacao": l.situacao,
-        "porte": l.porte,
-        "capital_social": l.capital_social,
-        "eh_cliente": l.eh_cliente,
-        "vendedor": l.vendedor,
-        "ultima_compra_em": l.ultima_compra_em.strftime("%d/%m/%Y") if l.ultima_compra_em else None,
-        "dias_sem_compra": l.dias_sem_compra,
-    } for l in resultado.items], ensure_ascii=False).replace("</", "<\\/")
-
-    return templates.TemplateResponse("partials/resultados.html", {
-        "request": request,
-        "resultado": resultado,
-        "stats_filtro": stats_filtro,
-        "ordenar_atual": req.ordenar,
-        "leads_json": leads_json,
-        "pagina_json": pagina_json,
-        "total_no_mapa": len(leads_mapa),
-        "limite_mapa": LIMITE_MAPA,
     })
 
 
