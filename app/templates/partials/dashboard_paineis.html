@@ -1,0 +1,155 @@
+<div id="paineis" class="space-y-5">
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+    {% set k = dados.kpis %}
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+      <div class="text-2xl font-bold text-[#f97316]">R$ {{ "{:,.0f}".format(k.faturamento).replace(",", ".") }}</div>
+      <div class="text-xs text-[#888] mt-1">Faturamento
+        {% if k.faturamento_delta_pct is not none %}
+        <span class="{{ 'text-green-400' if k.faturamento_delta_pct >= 0 else 'text-red-400' }}">
+          {{ '▲' if k.faturamento_delta_pct >= 0 else '▼' }} {{ k.faturamento_delta_pct|abs }}%</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+      <div class="text-2xl font-bold text-white">{{ k.pedidos }}</div>
+      <div class="text-xs text-[#888] mt-1">Pedidos
+        {% if k.pedidos_delta_pct is not none %}
+        <span class="{{ 'text-green-400' if k.pedidos_delta_pct >= 0 else 'text-red-400' }}">
+          {{ '▲' if k.pedidos_delta_pct >= 0 else '▼' }} {{ k.pedidos_delta_pct|abs }}%</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+      <div class="text-2xl font-bold text-white">R$ {{ "{:,.0f}".format(k.ticket).replace(",", ".") }}</div>
+      <div class="text-xs text-[#888] mt-1">Ticket médio</div>
+    </div>
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+      <div class="text-2xl font-bold text-white">{{ k.clientes }}</div>
+      <div class="text-xs text-blue-400 mt-1">Clientes que compraram</div>
+    </div>
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+      <div class="text-2xl font-bold text-white">{{ dados.risco.contagem.leve + dados.risco.contagem.medio + dados.risco.contagem.alto }}</div>
+      <div class="text-xs text-red-400 mt-1">Clientes em risco</div>
+    </div>
+  </div>
+
+  <!-- Série + Ranking -->
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+    <div class="lg:col-span-3 bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="text-sm font-semibold text-white px-5 py-3 border-b border-[#2e2e2e]">Faturamento no período</div>
+      <div class="p-4 h-72"><canvas id="chartSerie"></canvas></div>
+    </div>
+    <div class="lg:col-span-2 bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="text-sm font-semibold text-white px-5 py-3 border-b border-[#2e2e2e]">🏆 Ranking de vendedores</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#111]"><tr>
+            <th class="px-4 py-2 text-left text-[10px] text-[#666] uppercase tracking-wide">Vendedor</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Receita</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Pedidos</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Clientes</th>
+          </tr></thead>
+          <tbody class="divide-y divide-[#222]">
+            {% for v in dados.ranking %}
+            <tr class="hover:bg-[#1a1a1a]">
+              <td class="px-4 py-2 text-[#ccc]">{{ loop.index }}. {{ v.vendedor }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc] whitespace-nowrap">R$ {{ "{:,.0f}".format(v.receita).replace(",", ".") }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc]">{{ v.pedidos }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc]">{{ v.clientes }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="px-4 py-4 text-center text-[#555] text-xs">Nenhum pedido neste recorte.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risco + Top representadas -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="text-sm font-semibold text-white px-5 py-3 border-b border-[#2e2e2e] flex items-center gap-3 flex-wrap">
+        <span>⚠️ Clientes em risco</span>
+        {% set rc = dados.risco.contagem %}
+        <span class="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{{ rc.leve }} leve</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">{{ rc.medio }} médio</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{{ rc.alto }} alto</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#111]"><tr>
+            <th class="px-4 py-2 text-left text-[10px] text-[#666] uppercase tracking-wide">Cliente</th>
+            <th class="px-4 py-2 text-left text-[10px] text-[#666] uppercase tracking-wide">Vendedor</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Sem comprar</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Receita hist.</th>
+          </tr></thead>
+          <tbody class="divide-y divide-[#222]">
+            {% for c in dados.risco.lista %}
+            <tr class="hover:bg-[#1a1a1a]">
+              <td class="px-4 py-2 text-[#ccc]">{{ c.nome }}</td>
+              <td class="px-4 py-2 text-[#888] text-xs">{{ c.vendedor }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc]">{{ c.dias }}d</td>
+              <td class="px-4 py-2 text-right text-[#ccc] whitespace-nowrap">R$ {{ "{:,.0f}".format(c.receita).replace(",", ".") }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="px-4 py-4 text-center text-[#555] text-xs">Nenhum cliente em risco neste recorte.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="text-sm font-semibold text-white px-5 py-3 border-b border-[#2e2e2e]">Top representadas</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#111]"><tr>
+            <th class="px-4 py-2 text-left text-[10px] text-[#666] uppercase tracking-wide">Representada</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Receita</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">% total</th>
+          </tr></thead>
+          <tbody class="divide-y divide-[#222]">
+            {% for t in dados.top_representadas %}
+            <tr class="hover:bg-[#1a1a1a]">
+              <td class="px-4 py-2 text-[#ccc]">{{ t.nome }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc] whitespace-nowrap">R$ {{ "{:,.0f}".format(t.receita).replace(",", ".") }}</td>
+              <td class="px-4 py-2 text-right text-[#888]">{{ t.pct_total }}%</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="px-4 py-4 text-center text-[#555] text-xs">Sem dados neste recorte.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const serie = {{ dados.serie | tojson }};
+      const temCmp = serie.some(p => p.receita_cmp !== null && p.receita_cmp !== undefined);
+      const el = document.getElementById('chartSerie');
+      if (el && window.Chart) {
+        if (el._chart) el._chart.destroy();
+        Chart.defaults.color = '#888';
+        Chart.defaults.borderColor = '#2e2e2e';
+        const datasets = [{
+          type: 'bar', label: 'Período', data: serie.map(p => p.receita),
+          backgroundColor: 'rgba(249,115,22,0.7)', borderRadius: 4
+        }];
+        if (temCmp) {
+          datasets.push({
+            type: 'line', label: 'Comparado', data: serie.map(p => p.receita_cmp),
+            borderColor: '#60a5fa', borderDash: [5, 4], backgroundColor: 'transparent',
+            pointRadius: 0, tension: 0.3
+          });
+        }
+        el._chart = new Chart(el, {
+          data: { labels: serie.map(p => p.rotulo), datasets },
+          options: { maintainAspectRatio: false, plugins: { legend: { display: temCmp } } }
+        });
+      }
+    })();
+  </script>
+</div>

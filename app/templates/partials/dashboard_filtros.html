@@ -1,0 +1,46 @@
+<form id="filtros-dashboard"
+      hx-get="/dashboard" hx-target="#paineis" hx-swap="outerHTML"
+      hx-push-url="true" hx-trigger="change"
+      class="sticky top-[53px] z-20 -mx-5 px-5 py-3 bg-[#111] border-b border-[#2a2a2a] flex flex-wrap items-end gap-2.5">
+  {% set f = dados.filtros %}
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">De</label>
+    <input type="date" name="inicio" value="{{ f.inicio }}"
+           class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+  </div>
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Até</label>
+    <input type="date" name="fim" value="{{ f.fim }}"
+           class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+  </div>
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Comparar com</label>
+    <select name="comparacao" class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+      {% for val, txt in [('mes_anterior','Mês anterior'),('ano_anterior','Mesmo período ano passado'),('trimestre_anterior','Trimestre anterior'),('nenhuma','Sem comparação')] %}
+      <option value="{{ val }}" {% if f.comparacao == val %}selected{% endif %}>{{ txt }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Vendedor</label>
+    <select name="vendedor" class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+      <option value="">Todos</option>
+      {% for v in dados.opcoes.vendedores %}<option value="{{ v }}" {% if f.vendedor == v %}selected{% endif %}>{{ v }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Representada</label>
+    <select name="representada" class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+      <option value="">Todas</option>
+      {% for r in dados.opcoes.representadas %}<option value="{{ r }}" {% if f.representada == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Situação</label>
+    <select name="situacao" class="rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500">
+      <option value="confirmados" {% if f.situacao == 'confirmados' %}selected{% endif %}>Confirmados</option>
+      <option value="todos" {% if f.situacao == 'todos' %}selected{% endif %}>Todos (inclui orçamentos)</option>
+      {% for s in dados.opcoes.situacoes %}<option value="{{ s|lower }}" {% if f.situacao == s|lower %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+</form>
