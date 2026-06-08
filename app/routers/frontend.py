@@ -335,20 +335,28 @@ def pedidos_cliente(
         {"doc": doc},
     ).fetchall()
 
-    pedidos = []
-    for p in pedido_rows:
-        itens = db.execute(
+    # Carrega os itens de todos os pedidos numa única query (evita N+1).
+    numeros = [p.pedido_numero for p in pedido_rows]
+    itens_por_pedido: dict[int, list] = {}
+    if numeros:
+        itens_rows = db.execute(
             text("""
-                SELECT produto_codigo, produto_descricao, produto_unidade,
+                SELECT pedido_numero, produto_codigo, produto_descricao, produto_unidade,
                        quantidade, preco_unitario, desconto, total_liquido,
                        informacoes_adicionais
                 FROM pedido_mobile_item
-                WHERE pedido_numero = :n
-                ORDER BY id
+                WHERE pedido_numero = ANY(:nums)
+                ORDER BY pedido_numero, id
             """),
-            {"n": p.pedido_numero},
+            {"nums": numeros},
         ).fetchall()
-        pedidos.append({"pedido": p, "itens": itens})
+        for item in itens_rows:
+            itens_por_pedido.setdefault(item.pedido_numero, []).append(item)
+
+    pedidos = [
+        {"pedido": p, "itens": itens_por_pedido.get(p.pedido_numero, [])}
+        for p in pedido_rows
+    ]
 
     return templates.TemplateResponse("partials/pedidos_cliente.html", {
         "request": request,

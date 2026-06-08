@@ -1,4 +1,4 @@
-import json
+import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -12,10 +12,30 @@ from database import get_db
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
-_F = "ped.orcamento = FALSE AND ped.situacao != 'Cancelado'"
+# Filtro base das queries: ignora orçamentos e pedidos cancelados.
+# A comparação é tolerante a maiúsculas/espaços (a situação é gravada
+# crua, como vem da API) e a NULL (pedido sem situação não é cancelado).
+_F = "ped.orcamento = FALSE AND UPPER(TRIM(COALESCE(ped.situacao, ''))) <> 'CANCELADO'"
+
+# Cache em memória do dashboard (por processo). Os dados são agregados
+# globais, não por usuário, e mudam apenas após um sync — um TTL curto
+# evita recalcular as 7 queries pesadas a cada acesso.
+_CACHE_TTL_SEGUNDOS = 180
+_cache: dict = {"dados": None, "ts": 0.0}
 
 
 def _get_dados(db: Session) -> dict:
+    agora = time.monotonic()
+    if _cache["dados"] is not None and (agora - _cache["ts"]) < _CACHE_TTL_SEGUNDOS:
+        return _cache["dados"]
+
+    dados = _consultar_dados(db)
+    _cache["dados"] = dados
+    _cache["ts"] = agora
+    return dados
+
+
+def _consultar_dados(db: Session) -> dict:
     # KPIs
     k = db.execute(text(f"""
         SELECT
@@ -208,5 +228,4 @@ def dashboard(
         "request": request,
         "user": current_user,
         "dados": dados,
-        "dados_json": json.dumps(dados, ensure_ascii=False, default=str),
     })
