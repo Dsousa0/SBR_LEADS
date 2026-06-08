@@ -1,0 +1,252 @@
+{% include "partials/busca_cards.html" %}
+
+<div class="flex justify-end">
+  <a href="/?{{ querystring }}"
+     class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[#3a3a3a] text-[#aaa] hover:border-orange-500 hover:text-orange-500 transition-colors">
+    📋 Ver lista
+  </a>
+</div>
+
+<div id="tabs-container" class="bg-[#171717] rounded-xl border border-[#2e2e2e] overflow-hidden">
+  <div class="border-b border-[#2e2e2e] flex items-center justify-end gap-2 px-3 py-2" id="btns-mapa">
+    <button onclick="alternarCamadaMapa()" id="btn-satelite" type="button"
+            class="text-xs px-3 py-1.5 rounded-lg border border-[#3a3a3a] text-[#aaa] hover:border-orange-500 hover:text-orange-500 transition-colors flex items-center gap-1.5"
+            title="Alternar entre mapa e satélite">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <span id="lbl-satelite">Satélite</span>
+    </button>
+    <button onclick="alternarMapaExpandido()" id="btn-expandir-mapa" type="button"
+            class="text-xs px-3 py-1.5 rounded-lg border border-[#3a3a3a] text-[#aaa] hover:border-orange-500 hover:text-orange-500 transition-colors flex items-center gap-1.5"
+            title="Alternar visualização ampliada (ESC para voltar)">
+      <svg id="ico-expandir" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m4 0v-4m0 4l-5-5"/>
+      </svg>
+      <span id="lbl-expandir">Expandir</span>
+    </button>
+  </div>
+  <div id="painel-mapa">
+    {% if total_no_mapa is defined and resultado_total > total_no_mapa %}
+    <div class="bg-[#1a1a1a] text-[#888] text-xs px-4 py-2 border-b border-[#2e2e2e] flex items-center gap-2">
+      <svg class="w-3.5 h-3.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Mostrando os primeiros {{ "{:,}".format(total_no_mapa).replace(",", ".") }} de
+      {{ "{:,}".format(resultado_total).replace(",", ".") }} resultados no mapa (refine os filtros para ver todos).
+    </div>
+    {% endif %}
+    <div id="mapa"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+const leads = {{ leads_json | safe }};
+
+const CONCORRENCIA_GEOCODE = 6;
+const CACHE_PREFIXO = 'pm2_';
+const BRASIL_LAT_MIN = -34, BRASIL_LAT_MAX = 6;
+const BRASIL_LON_MIN = -74, BRASIL_LON_MAX = -34;
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _icone(ehCliente) {
+  const cor = ehCliente ? '#f97316' : '#a855f7';
+  const html = `<div style="background:${cor};width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.6)"></div>`;
+  return L.divIcon({ html, className: 'pm-marker', iconSize: [18, 18], iconAnchor: [9, 9], popupAnchor: [0, -9] });
+}
+
+function _cacheGet(chave) {
+  try { const v = localStorage.getItem(chave); return v ? JSON.parse(v) : null; }
+  catch (_) { return null; }
+}
+
+function _cacheSet(chave, valor) {
+  const v = JSON.stringify(valor);
+  try { localStorage.setItem(chave, v); }
+  catch (_) {
+    try {
+      Object.keys(localStorage).filter(x => x.startsWith(CACHE_PREFIXO)).forEach(x => localStorage.removeItem(x));
+      localStorage.setItem(chave, v);
+    } catch (_) {}
+  }
+}
+
+function _dentroBrasil(lat, lon) {
+  return lat >= BRASIL_LAT_MIN && lat <= BRASIL_LAT_MAX && lon >= BRASIL_LON_MIN && lon <= BRASIL_LON_MAX;
+}
+
+function _norm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function _cidadeOk(esperada, retornada) {
+  if (!esperada || !retornada) return true;
+  const a = _norm(esperada), b = _norm(retornada);
+  return a.includes(b) || b.includes(a);
+}
+
+async function _coordsPorEndereco(lead) {
+  if (!lead.cnpj) return null;
+  const chave = 'pm2_addr_' + lead.cnpj;
+  const cached = _cacheGet(chave);
+  if (cached !== null) return cached.lat ? cached : null;
+
+  const partes = [lead.tipo_logradouro, lead.logradouro, lead.numero, lead.municipio, lead.uf, 'Brasil'].filter(Boolean);
+  if (partes.length < 3) return null;
+  const q = partes.join(', ');
+
+  try {
+    const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1`);
+    if (!r.ok) { _cacheSet(chave, { lat: null }); return null; }
+    const d = await r.json();
+    const f = d.features && d.features[0];
+    if (!f || !f.geometry || !f.geometry.coordinates) { _cacheSet(chave, { lat: null }); return null; }
+    const [lon, lat] = f.geometry.coordinates;
+    if (!isFinite(lat) || !isFinite(lon) || !_dentroBrasil(lat, lon)) { _cacheSet(chave, { lat: null }); return null; }
+    const props = f.properties || {};
+    const cidadeRetornada = props.city || props.locality || props.name || '';
+    if (!_cidadeOk(lead.municipio, cidadeRetornada)) { _cacheSet(chave, { lat: null }); return null; }
+    const coords = { lat, lon };
+    _cacheSet(chave, coords);
+    return coords;
+  } catch (_) { return null; }
+}
+
+async function _coordsPorCep(cep, municipio) {
+  const limpo = (cep || '').replace(/\D/g, '');
+  if (limpo.length !== 8) return null;
+  const chave = 'pm2_cep_' + limpo;
+  const cached = _cacheGet(chave);
+  if (cached !== null) return cached.lat ? cached : null;
+
+  try {
+    const r = await fetch(`https://cep.awesomeapi.com.br/json/${limpo}`);
+    if (!r.ok) { _cacheSet(chave, { lat: null }); return null; }
+    const d = await r.json();
+    if (!d.lat || !d.lng) { _cacheSet(chave, { lat: null }); return null; }
+    if (!_cidadeOk(municipio, d.city)) { _cacheSet(chave, { lat: null }); return null; }
+    const coords = { lat: parseFloat(d.lat), lon: parseFloat(d.lng) };
+    if (isNaN(coords.lat) || isNaN(coords.lon)) { _cacheSet(chave, { lat: null }); return null; }
+    _cacheSet(chave, coords);
+    return coords;
+  } catch (_) { return null; }
+}
+
+async function _resolverCoords(lead) {
+  return (await _coordsPorEndereco(lead)) || (await _coordsPorCep(lead.cep, lead.municipio));
+}
+
+async function _comConcorrencia(items, n, worker) {
+  const fila = items.slice();
+  const trabalhadores = Array.from({ length: Math.min(n, fila.length) }, async () => {
+    while (fila.length) { await worker(fila.shift()); }
+  });
+  await Promise.all(trabalhadores);
+}
+
+window.alternarMapaExpandido = function() {
+  const cont = document.getElementById('tabs-container');
+  const lbl = document.getElementById('lbl-expandir');
+  const expandido = cont.classList.toggle('mapa-expandido');
+  document.body.classList.toggle('overflow-hidden', expandido);
+  lbl.textContent = expandido ? 'Reduzir' : 'Expandir';
+  if (window.mapaLeaflet) setTimeout(() => window.mapaLeaflet.invalidateSize(), 200);
+};
+
+function _atualizarBtnSatelite(satelite) {
+  const lbl = document.getElementById('lbl-satelite');
+  if (lbl) lbl.textContent = satelite ? 'Mapa' : 'Satélite';
+}
+
+window.alternarCamadaMapa = function() {
+  if (!window.mapaLeaflet) return;
+  const usaSat = window.mapaLeaflet.hasLayer(window._camadaSat);
+  if (usaSat) {
+    window.mapaLeaflet.removeLayer(window._camadaSat);
+    window._camadaRua.addTo(window.mapaLeaflet);
+    localStorage.setItem('pm_camada', 'rua');
+  } else {
+    window.mapaLeaflet.removeLayer(window._camadaRua);
+    window._camadaSat.addTo(window.mapaLeaflet);
+    localStorage.setItem('pm_camada', 'satelite');
+  }
+  _atualizarBtnSatelite(!usaSat);
+};
+
+if (!window._pmEscBound) {
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const cont = document.getElementById('tabs-container');
+      if (cont && cont.classList.contains('mapa-expandido')) window.alternarMapaExpandido();
+    }
+  });
+  window._pmEscBound = true;
+}
+
+window.iniciarMapa = async function() {
+  if (window.mapaLeaflet) {
+    try { window.mapaLeaflet.remove(); } catch (_) {}
+    window.mapaLeaflet = null;
+  }
+  const mapDiv = document.getElementById('mapa');
+  if (mapDiv && mapDiv._leaflet_id != null) delete mapDiv._leaflet_id;
+
+  const mapa = L.map('mapa').setView([-15.77, -47.93], 5);
+  window.mapaLeaflet = mapa;
+
+  const camadaRua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19,
+  });
+  const camadaSat = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: '© Esri', maxNativeZoom: 16, maxZoom: 21 }
+  );
+  const usaSat = localStorage.getItem('pm_camada') === 'satelite';
+  (usaSat ? camadaSat : camadaRua).addTo(mapa);
+  window._camadaRua = camadaRua;
+  window._camadaSat = camadaSat;
+  _atualizarBtnSatelite(usaSat);
+
+  const cluster = L.markerClusterGroup({
+    iconCreateFunction: c => L.divIcon({
+      html: `<div>${c.getChildCount()}</div>`, className: 'marker-cluster-pm', iconSize: [40, 40],
+    }),
+    spiderfyOnMaxZoom: true, showCoverageOnHover: false, maxClusterRadius: 40,
+  });
+  mapa.addLayer(cluster);
+
+  await _comConcorrencia(leads, CONCORRENCIA_GEOCODE, async (lead) => {
+    if (window.mapaLeaflet !== mapa) return;
+    const coords = await _resolverCoords(lead);
+    if (!coords || window.mapaLeaflet !== mapa) return;
+    const label = lead.nome_fantasia || lead.razao_social || '';
+    const end = [lead.tipo_logradouro, lead.logradouro, lead.numero].filter(Boolean).join(' ');
+    const loc = [lead.municipio, lead.uf].filter(Boolean).join('/');
+    const tel = lead.ddd_1 ? '(' + lead.ddd_1 + ') ' + lead.telefone_1 : '';
+    const clienteInfo = lead.eh_cliente
+      ? ` <span style="color:#f97316;font-weight:600">✓ Cliente${lead.vendedor ? ' · ' + _esc(lead.vendedor) : ''}</span>` : '';
+    const detalhes = [end, loc, tel].filter(Boolean).map(s => _esc(s)).join(' &nbsp;·&nbsp; ');
+    const tip = `<div style="font-weight:600;color:#fff">${_esc(label)}${clienteInfo}</div>`
+      + (detalhes ? `<div style="color:#888;font-size:11px;margin-top:2px">${detalhes}</div>` : '');
+    cluster.addLayer(
+      L.marker([coords.lat, coords.lon], { icon: _icone(lead.eh_cliente) })
+        .bindTooltip(tip, { direction: 'top', offset: [0, -12], className: 'pm-tip' })
+    );
+  });
+
+  if (cluster.getLayers().length && window.mapaLeaflet === mapa) {
+    mapa.fitBounds(cluster.getBounds(), { padding: [40, 40], maxZoom: 15 });
+  }
+};
+
+if (document.getElementById('mapa')) window.iniciarMapa();
+})();
+</script>
