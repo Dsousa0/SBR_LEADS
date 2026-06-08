@@ -7,7 +7,7 @@
 {% block title %}Dashboard Comercial{% endblock %}
 
 {% block content %}
-<script>const d = {{ dados_json | safe }};</script>
+<script>const d = {{ dados | tojson }};</script>
 
 <div class="space-y-5 p-5">
 
@@ -28,17 +28,17 @@
         <div class="text-2xl font-bold text-white" id="kpi-receita-mes"></div>
         <span id="kpi-variacao" class="text-xs font-semibold px-1.5 py-0.5 rounded mb-0.5"></span>
       </div>
-      <div class="text-xs text-[#888] mt-1">Faturamento do mes</div>
+      <div class="text-xs text-[#888] mt-1">Faturamento do mês</div>
     </div>
 
     <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
       <div class="text-2xl font-bold text-white" id="kpi-ticket"></div>
-      <div class="text-xs text-[#888] mt-1">Ticket medio</div>
+      <div class="text-xs text-[#888] mt-1">Ticket médio</div>
     </div>
 
     <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
       <div class="text-2xl font-bold text-white" id="kpi-pedidos"></div>
-      <div class="text-xs text-[#888] mt-1">Pedidos este mes</div>
+      <div class="text-xs text-[#888] mt-1">Pedidos este mês</div>
     </div>
 
   </div>
@@ -106,7 +106,7 @@
               <th class="px-4 py-2.5 text-left text-[10px] font-semibold text-[#666] uppercase tracking-wide">Vendedor</th>
               <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Receita</th>
               <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Pedidos</th>
-              <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Ultima compra</th>
+              <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Última compra</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-[#222]">
@@ -132,7 +132,7 @@
       <span>Clientes em Risco</span>
       {% set rc = dados.risco_counts %}
       <span class="text-xs font-medium px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">{{ rc.leve }} leve (30–60d)</span>
-      <span class="text-xs font-medium px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">{{ rc.medio }} medio (61–90d)</span>
+      <span class="text-xs font-medium px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">{{ rc.medio }} médio (61–90d)</span>
       <span class="text-xs font-medium px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{{ rc.alto }} alto (+90d)</span>
     </div>
     <div class="p-0 overflow-hidden">
@@ -141,10 +141,10 @@
           <tr>
             <th class="px-4 py-2.5 text-left text-[10px] font-semibold text-[#666] uppercase tracking-wide">Cliente</th>
             <th class="px-4 py-2.5 text-left text-[10px] font-semibold text-[#666] uppercase tracking-wide">Vendedor</th>
-            <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Ultima compra</th>
+            <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Última compra</th>
             <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Dias sem comprar</th>
             <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Pedidos</th>
-            <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Receita historica</th>
+            <th class="px-4 py-2.5 text-right text-[10px] font-semibold text-[#666] uppercase tracking-wide">Receita histórica</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-[#222]">
