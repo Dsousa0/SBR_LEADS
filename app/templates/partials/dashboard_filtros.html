@@ -1,7 +1,7 @@
 <form id="filtros-dashboard"
       hx-get="/dashboard" hx-target="#paineis" hx-swap="outerHTML"
       hx-push-url="true" hx-trigger="change"
-      class="sticky top-[53px] z-20 -mx-5 px-5 py-3 bg-[#111] border-b border-[#2a2a2a] flex flex-wrap items-end gap-2.5">
+      class="sticky top-0 z-20 -mx-5 px-5 py-3 bg-[#111] border-b border-[#2a2a2a] flex flex-wrap items-end gap-2.5">
   {% set f = dados.filtros %}
   <div>
     <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">De</label>
