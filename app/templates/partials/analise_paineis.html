@@ -145,7 +145,6 @@
           const ativo = b.dataset.abaBtn === aba;
           b.classList.toggle('text-orange-500', ativo);
           b.classList.toggle('border-orange-500', ativo);
-          b.classList.toggle('text-white', false);
           b.classList.toggle('text-[#888]', !ativo);
           b.classList.toggle('border-transparent', !ativo);
         });
@@ -173,11 +172,13 @@
         });
       });
 
-      // Estado inicial: aba Produtos + filtro na classe A em cada painel.
+      // Estado inicial: aba Produtos + filtro na primeira classe que tem itens
+      // (A preferida; cai para B/C se A estiver vazia, ex.: recorte só de cauda longa).
       ativarAba('produtos');
       document.querySelectorAll('[data-aba-painel]').forEach(p => {
-        const chipA = p.querySelector('[data-chip="A"]');
-        if (chipA) filtrarClasse(p, 'A', chipA);
+        const classeInicial = ['A', 'B', 'C'].find(c => p.querySelector('tr[data-classe="' + c + '"]')) || 'A';
+        const chip = p.querySelector('[data-chip="' + classeInicial + '"]');
+        if (chip) filtrarClasse(p, classeInicial, chip);
       });
     })();
   </script>
