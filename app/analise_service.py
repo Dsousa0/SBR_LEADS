@@ -135,3 +135,18 @@ def curva_abc(db: Session, f: FiltrosDashboard, *, dimensao: str,
         itens = _itens_representada(db, where, params)
     saida, resumo = _classificar(itens, criterio, cortes)
     return {"itens": saida, "resumo": resumo}
+
+
+def montar_analise(db: Session, f: FiltrosDashboard, *, criterio: str, cortes_str: str) -> dict:
+    """Agrega os dados das duas curvas ABC. Normaliza critério e cortes."""
+    criterio = parse_criterio(criterio)
+    cortes_str = cortes_canonico(cortes_str)
+    cortes = parse_cortes(cortes_str)
+    return {
+        "filtros": f,
+        "opcoes": opcoes_filtro(db),
+        "criterio": criterio,
+        "cortes": cortes_str,
+        "produtos": curva_abc(db, f, dimensao="produto", criterio=criterio, cortes=cortes),
+        "representadas": curva_abc(db, f, dimensao="representada", criterio=criterio, cortes=cortes),
+    }

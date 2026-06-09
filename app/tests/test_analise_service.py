@@ -160,3 +160,23 @@ def test_curva_abc_representada_sem_dados(db):
     f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
     curva = svc.curva_abc(db, f, dimensao="representada", criterio="quantidade", cortes=(50, 30))
     assert curva["itens"] == []
+
+
+def test_montar_analise_inclui_todas_as_chaves(db):
+    _seed_itens(db)
+    f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
+    dados = svc.montar_analise(db, f, criterio="receita", cortes_str="50-30-20")
+    for chave in ("filtros", "opcoes", "criterio", "cortes", "produtos", "representadas"):
+        assert chave in dados
+    assert dados["criterio"] == "receita"
+    assert dados["cortes"] == "50-30-20"
+    assert "itens" in dados["produtos"] and "resumo" in dados["produtos"]
+    assert "itens" in dados["representadas"] and "resumo" in dados["representadas"]
+
+
+def test_montar_analise_normaliza_entradas_invalidas(db):
+    _seed_itens(db)
+    f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
+    dados = svc.montar_analise(db, f, criterio="xpto", cortes_str="zzz")
+    assert dados["criterio"] == "receita"
+    assert dados["cortes"] == "50-30-20"
