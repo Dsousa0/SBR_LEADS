@@ -1,0 +1,184 @@
+<div id="paineis" class="space-y-5">
+  {% set criterio_label = 'Receita' if dados.criterio == 'receita' else 'Quantidade' %}
+
+  <!-- Abas -->
+  <div class="flex gap-1 border-b border-[#2e2e2e]">
+    <button type="button" data-aba-btn="produtos"
+            class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[#888] hover:text-white">
+      Produtos
+    </button>
+    <button type="button" data-aba-btn="representadas"
+            class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-[#888] hover:text-white">
+      Representadas
+    </button>
+  </div>
+
+  {% set abas = [('produtos', 'Produto', dados.produtos), ('representadas', 'Representada', dados.representadas)] %}
+  {% for chave, rotulo, curva in abas %}
+  <div data-aba-painel="{{ chave }}" class="space-y-4 {% if not loop.first %}hidden{% endif %}">
+
+    <!-- Resumo por classe -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {% set cores = {'A': 'text-green-400', 'B': 'text-orange-400', 'C': 'text-[#888]'} %}
+      {% for classe in ['A', 'B', 'C'] %}
+      {% set r = curva.resumo[classe] %}
+      <div class="bg-[#171717] rounded-xl border border-[#2e2e2e] p-4">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold {{ cores[classe] }}">Classe {{ classe }}</span>
+          <span class="text-xs text-[#666]">{{ r.itens }} itens</span>
+        </div>
+        <div class="text-xl font-bold {{ cores[classe] }} mt-2">{{ r.pct }}%</div>
+        <div class="text-[11px] text-[#888] mt-1">do total de {{ criterio_label|lower }}</div>
+        <div class="text-[11px] text-[#666] mt-2">
+          R$ {{ "{:,.0f}".format(r.receita).replace(",", ".") }} · {{ "{:,.0f}".format(r.quantidade).replace(",", ".") }} un
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Pareto -->
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="text-sm font-semibold text-white px-5 py-3 border-b border-[#2e2e2e]">
+        Curva ABC — {{ criterio_label }} por {{ rotulo|lower }}
+      </div>
+      <div class="p-4 h-80"><canvas id="chart_{{ chave }}"></canvas></div>
+    </div>
+
+    <!-- Tabela com chips de classe -->
+    <div class="bg-[#171717] rounded-xl border border-[#2e2e2e]">
+      <div class="px-5 py-3 border-b border-[#2e2e2e] flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-semibold text-white mr-2">Detalhamento</span>
+        {% for chip in ['A', 'B', 'C', 'todas'] %}
+        <button type="button" data-chip="{{ chip }}"
+                class="text-xs px-2.5 py-1 rounded-full border border-[#333] text-[#888] hover:text-white">
+          {{ 'Todas' if chip == 'todas' else 'Classe ' ~ chip }}
+        </button>
+        {% endfor %}
+      </div>
+      <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#111] sticky top-0"><tr>
+            <th class="px-4 py-2 text-left  text-[10px] text-[#666] uppercase tracking-wide">#</th>
+            <th class="px-4 py-2 text-left  text-[10px] text-[#666] uppercase tracking-wide">{{ rotulo }}</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Receita</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">Qtd</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">% {{ criterio_label|lower }}</th>
+            <th class="px-4 py-2 text-right text-[10px] text-[#666] uppercase tracking-wide">% acum.</th>
+            <th class="px-4 py-2 text-center text-[10px] text-[#666] uppercase tracking-wide">Classe</th>
+          </tr></thead>
+          <tbody class="divide-y divide-[#222]">
+            {% set badge = {'A': 'bg-green-500/12 text-green-400', 'B': 'bg-orange-500/12 text-orange-400', 'C': 'bg-[#333]/40 text-[#999]'} %}
+            {% for i in curva.itens %}
+            <tr data-classe="{{ i.classe }}" class="hover:bg-[#1a1a1a]">
+              <td class="px-4 py-2 text-[#666]">{{ loop.index }}</td>
+              <td class="px-4 py-2 text-[#ccc]">{{ i.nome }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc] whitespace-nowrap">R$ {{ "{:,.0f}".format(i.receita).replace(",", ".") }}</td>
+              <td class="px-4 py-2 text-right text-[#ccc]">{{ "{:,.0f}".format(i.quantidade).replace(",", ".") }}</td>
+              <td class="px-4 py-2 text-right text-[#888]">{{ i.pct }}%</td>
+              <td class="px-4 py-2 text-right text-[#888]">{{ i.pct_acumulado }}%</td>
+              <td class="px-4 py-2 text-center">
+                <span class="inline-block text-[10px] px-2 py-0.5 rounded-full {{ badge[i.classe] }}">{{ i.classe }}</span>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="px-4 py-6 text-center text-[#555] text-xs">Sem dados neste recorte.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <script>
+    (function () {
+      const CRITERIO = {{ dados.criterio | tojson }};
+      const PANELS = {
+        produtos: {{ dados.produtos.itens | tojson }},
+        representadas: {{ dados.representadas.itens | tojson }},
+      };
+
+      function corClasse(c) {
+        if (c === 'A') return 'rgba(34,197,94,0.7)';
+        if (c === 'B') return 'rgba(249,115,22,0.7)';
+        return 'rgba(120,120,120,0.55)';
+      }
+
+      function montarGrafico(aba) {
+        const itens = PANELS[aba] || [];
+        const el = document.getElementById('chart_' + aba);
+        if (!el || !window.Chart) return;
+        if (el._chart) el._chart.destroy();
+        Chart.defaults.color = '#888';
+        Chart.defaults.borderColor = '#2e2e2e';
+        const valores = itens.map(i => CRITERIO === 'receita' ? i.receita : i.quantidade);
+        el._chart = new Chart(el, {
+          data: {
+            labels: itens.map(i => i.nome),
+            datasets: [
+              { type: 'bar', label: CRITERIO === 'receita' ? 'Receita' : 'Quantidade', yAxisID: 'y',
+                data: valores, backgroundColor: itens.map(i => corClasse(i.classe)), borderRadius: 3 },
+              { type: 'line', label: '% acumulado', yAxisID: 'y2',
+                data: itens.map(i => i.pct_acumulado), borderColor: '#60a5fa',
+                backgroundColor: 'transparent', pointRadius: 0, tension: 0.2 },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            scales: {
+              y:  { position: 'left' },
+              y2: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false },
+                    ticks: { callback: v => v + '%' } },
+              x:  { ticks: { display: false } },
+            },
+            plugins: { legend: { display: true } },
+          },
+        });
+      }
+
+      const criados = {};
+      function ativarAba(aba) {
+        document.querySelectorAll('[data-aba-painel]').forEach(p => {
+          p.classList.toggle('hidden', p.dataset.abaPainel !== aba);
+        });
+        document.querySelectorAll('[data-aba-btn]').forEach(b => {
+          const ativo = b.dataset.abaBtn === aba;
+          b.classList.toggle('text-orange-500', ativo);
+          b.classList.toggle('border-orange-500', ativo);
+          b.classList.toggle('text-white', false);
+          b.classList.toggle('text-[#888]', !ativo);
+          b.classList.toggle('border-transparent', !ativo);
+        });
+        if (!criados[aba]) { montarGrafico(aba); criados[aba] = true; }
+      }
+
+      function filtrarClasse(painel, classe, chipAtivo) {
+        painel.querySelectorAll('[data-chip]').forEach(c => {
+          const ativo = c === chipAtivo;
+          c.classList.toggle('bg-orange-500/20', ativo);
+          c.classList.toggle('text-orange-400', ativo);
+          c.classList.toggle('border-orange-500/40', ativo);
+        });
+        painel.querySelectorAll('tr[data-classe]').forEach(tr => {
+          tr.classList.toggle('hidden', classe !== 'todas' && tr.dataset.classe !== classe);
+        });
+      }
+
+      document.querySelectorAll('[data-aba-btn]').forEach(b => {
+        b.addEventListener('click', () => ativarAba(b.dataset.abaBtn));
+      });
+      document.querySelectorAll('[data-chip]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          filtrarClasse(chip.closest('[data-aba-painel]'), chip.dataset.chip, chip);
+        });
+      });
+
+      // Estado inicial: aba Produtos + filtro na classe A em cada painel.
+      ativarAba('produtos');
+      document.querySelectorAll('[data-aba-painel]').forEach(p => {
+        const chipA = p.querySelector('[data-chip="A"]');
+        if (chipA) filtrarClasse(p, 'A', chipA);
+      });
+    })();
+  </script>
+</div>
