@@ -88,7 +88,15 @@
   - Lock contra syncs simultâneos do Pedido Mobile
   - Escape XSS em popups do Leaflet e no `leads_json`
 
-**Próxima etapa:** Etapa 6 — Deploy VPS Hostinger (Caddy + cron mensal + backup)
+- **Cockpit Comercial (evolução do `/dashboard`):**
+  - Fase 1 — Cockpit do gestor (KPIs comparados, ranking de vendedores, clientes em risco, top representadas) sobre uma fundação de filtros na URL + HTMX + cache por recorte
+  - Fase 2 / A1 — Casca de navegação (menu lateral) + hub de Dashboards
+  - Fase 2 / A2 — Separação de Busca e Mapa (filtros na querystring)
+  - Fase 2 / B — **Dashboard de Análise de Vendas**: curvas ABC (Pareto) de produtos e representadas, critério selecionável receita/quantidade, cortes 50/30/20 · 70/20/10 · 80/15/5, em abas (resumo + Pareto + tabela com filtro por classe). Spec/plano em `docs/superpowers/{specs,plans}/2026-06-09-analise-vendas-abc*`
+
+**Próximas frentes:**
+- **Cockpit Comercial Fase 3** — Realizado vs. meta (exige cadastro de metas; dado/telas novos)
+- **Etapa 6 (infra)** — Deploy VPS Hostinger (Caddy + cron mensal + backup)
 
 ## Próximas Etapas
 
