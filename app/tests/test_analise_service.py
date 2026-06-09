@@ -1,4 +1,27 @@
 import analise_service as svc
+from datetime import date
+
+from sqlalchemy import text
+
+from dashboard_filters import FiltrosDashboard
+
+
+def _seed_itens(db):
+    db.execute(text("""
+        INSERT INTO pedido_mobile_pedido
+            (pedido_numero, cliente_documento, vendedor, representada, emissao, situacao, orcamento, total_liquido)
+        VALUES
+            (1, '111', 'Joao', 'Alpha', '2026-06-05', 'Enviado', FALSE, 100),
+            (2, '222', 'Maria','Beta',  '2026-06-06', 'Enviado', FALSE,  60)
+    """))
+    db.execute(text("""
+        INSERT INTO pedido_mobile_item
+            (pedido_numero, produto_codigo, produto_descricao, quantidade, total_liquido)
+        VALUES
+            (1, 'A', 'Produto A', 2, 80),
+            (1, 'B', 'Produto B', 5, 20),
+            (2, 'A', 'Produto A', 3, 60)
+    """))
 
 
 # ---- parsing de cortes ----
@@ -95,3 +118,25 @@ def test_classificar_total_zero_vira_tudo_C():
     saida, resumo = svc._classificar(_itens(("Z1", 0, 0), ("Z2", 0, 0)), "receita", (50, 30))
     assert all(i["classe"] == "C" for i in saida)
     assert all(i["pct"] == 0.0 for i in saida)
+
+
+def test_curva_abc_produto_agrega_por_codigo(db):
+    _seed_itens(db)
+    f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
+    curva = svc.curva_abc(db, f, dimensao="produto", criterio="receita", cortes=(50, 30))
+    por_nome = {i["nome"]: i for i in curva["itens"]}
+    # Produto A: 80 + 60 = 140; Produto B: 20. Total 160.
+    assert por_nome["Produto A"]["receita"] == 140.0
+    assert por_nome["Produto A"]["quantidade"] == 5.0  # 2 + 3
+    assert por_nome["Produto B"]["receita"] == 20.0
+    assert curva["itens"][0]["nome"] == "Produto A"  # ordenado por receita desc
+    assert curva["itens"][0]["classe"] == "A"
+
+
+def test_curva_abc_produto_respeita_filtro_periodo(db):
+    _seed_itens(db)
+    # Período que exclui tudo -> sem itens, sem exceção.
+    f = FiltrosDashboard.from_query({"inicio": "2020-01-01", "fim": "2020-01-31"}, hoje=date(2026, 6, 8))
+    curva = svc.curva_abc(db, f, dimensao="produto", criterio="receita", cortes=(50, 30))
+    assert curva["itens"] == []
+    assert curva["resumo"]["total_itens"] == 0

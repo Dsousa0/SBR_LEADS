@@ -4,6 +4,12 @@ Reusa FiltrosDashboard/build_where/opcoes_filtro do dashboard_service do cockpit
 A classificação ABC é math pura (testável sem banco).
 """
 
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from dashboard_filters import FiltrosDashboard
+from dashboard_service import build_where, opcoes_filtro
+
 # Whitelist de cortes ABC: string canônica -> (corte_a, corte_b) em pontos percentuais.
 # A classe C ocupa o restante (100 - a - b).
 _CORTES = {"50-30-20": (50, 30), "70-20-10": (70, 20), "80-15-5": (80, 15)}
@@ -72,3 +78,33 @@ def _classificar(itens: list[dict], criterio: str, cortes: tuple[int, int]):
     resumo["total_receita"] = float(sum(i["receita"] for i in saida))
     resumo["total_quantidade"] = float(sum(i["quantidade"] for i in saida))
     return saida, resumo
+
+
+def _itens_produto(db: Session, where: str, params: dict) -> list[dict]:
+    rows = db.execute(text(f"""
+        SELECT pit.produto_codigo                  AS codigo,
+               MAX(pit.produto_descricao)          AS nome,
+               COALESCE(SUM(pit.total_liquido), 0) AS receita,
+               COALESCE(SUM(pit.quantidade), 0)    AS quantidade
+        FROM pedido_mobile_item pit
+        JOIN pedido_mobile_pedido ped ON ped.pedido_numero = pit.pedido_numero
+        WHERE {where} AND pit.produto_codigo IS NOT NULL
+        GROUP BY pit.produto_codigo
+    """), params).fetchall()
+    return [{
+        "codigo": r.codigo,
+        "nome": r.nome or r.codigo or "—",
+        "receita": float(r.receita or 0),
+        "quantidade": float(r.quantidade or 0),
+    } for r in rows]
+
+
+def curva_abc(db: Session, f: FiltrosDashboard, *, dimensao: str,
+              criterio: str, cortes: tuple[int, int]) -> dict:
+    where, params = build_where(f)
+    if dimensao == "produto":
+        itens = _itens_produto(db, where, params)
+    else:
+        itens = _itens_representada(db, where, params)
+    saida, resumo = _classificar(itens, criterio, cortes)
+    return {"itens": saida, "resumo": resumo}
