@@ -1,8 +1,8 @@
-import analise_service as svc
 from datetime import date
 
 from sqlalchemy import text
 
+import analise_service as svc
 from dashboard_filters import FiltrosDashboard
 
 
@@ -140,3 +140,23 @@ def test_curva_abc_produto_respeita_filtro_periodo(db):
     curva = svc.curva_abc(db, f, dimensao="produto", criterio="receita", cortes=(50, 30))
     assert curva["itens"] == []
     assert curva["resumo"]["total_itens"] == 0
+
+
+def test_curva_abc_representada_receita_pedido_quantidade_item(db):
+    _seed_itens(db)
+    f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
+    curva = svc.curva_abc(db, f, dimensao="representada", criterio="receita", cortes=(50, 30))
+    por_nome = {i["nome"]: i for i in curva["itens"]}
+    # Alpha = pedido 1 (total_liquido 100); Beta = pedido 2 (60).
+    assert por_nome["Alpha"]["receita"] == 100.0
+    assert por_nome["Beta"]["receita"] == 60.0
+    # Quantidade vem dos itens: Alpha = 2 + 5 = 7; Beta = 3.
+    assert por_nome["Alpha"]["quantidade"] == 7.0
+    assert por_nome["Beta"]["quantidade"] == 3.0
+    assert curva["itens"][0]["nome"] == "Alpha"  # maior receita primeiro
+
+
+def test_curva_abc_representada_sem_dados(db):
+    f = FiltrosDashboard.from_query({"inicio": "2026-06-01", "fim": "2026-06-30"}, hoje=date(2026, 6, 8))
+    curva = svc.curva_abc(db, f, dimensao="representada", criterio="quantidade", cortes=(50, 30))
+    assert curva["itens"] == []

@@ -99,6 +99,33 @@ def _itens_produto(db: Session, where: str, params: dict) -> list[dict]:
     } for r in rows]
 
 
+def _itens_representada(db: Session, where: str, params: dict) -> list[dict]:
+    # Receita no nível do pedido (igual ao cockpit).
+    receitas = db.execute(text(f"""
+        SELECT COALESCE(NULLIF(TRIM(representada), ''), '—') AS nome,
+               COALESCE(SUM(total_liquido), 0)              AS receita
+        FROM pedido_mobile_pedido ped
+        WHERE {where}
+        GROUP BY COALESCE(NULLIF(TRIM(representada), ''), '—')
+    """), params).fetchall()
+    # Quantidade no nível do item.
+    quantidades = db.execute(text(f"""
+        SELECT COALESCE(NULLIF(TRIM(ped.representada), ''), '—') AS nome,
+               COALESCE(SUM(pit.quantidade), 0)                 AS quantidade
+        FROM pedido_mobile_item pit
+        JOIN pedido_mobile_pedido ped ON ped.pedido_numero = pit.pedido_numero
+        WHERE {where}
+        GROUP BY COALESCE(NULLIF(TRIM(ped.representada), ''), '—')
+    """), params).fetchall()
+    mapa_qtd = {r.nome: float(r.quantidade or 0) for r in quantidades}
+    return [{
+        "codigo": None,
+        "nome": r.nome,
+        "receita": float(r.receita or 0),
+        "quantidade": mapa_qtd.get(r.nome, 0.0),
+    } for r in receitas]
+
+
 def curva_abc(db: Session, f: FiltrosDashboard, *, dimensao: str,
               criterio: str, cortes: tuple[int, int]) -> dict:
     where, params = build_where(f)
