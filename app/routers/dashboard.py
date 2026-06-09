@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 import dashboard_service as svc
+import analise_service as svc_analise
 from auth import require_login
 from config import BRT
 from dashboard_filters import FiltrosDashboard
@@ -30,6 +31,20 @@ def _dados_cacheados(db: Session, f: FiltrosDashboard, *, hoje) -> dict:
     return dados
 
 
+_cache_analise: dict = {}  # chave -> (ts, dados)
+
+
+def _dados_analise_cacheados(db: Session, f: FiltrosDashboard, *, criterio: str, cortes_str: str) -> dict:
+    chave = "|".join([f.chave_cache(), criterio, cortes_str])
+    agora = time.monotonic()
+    item = _cache_analise.get(chave)
+    if item and (agora - item[0]) < _CACHE_TTL_SEGUNDOS:
+        return item[1]
+    dados = svc_analise.montar_analise(db, f, criterio=criterio, cortes_str=cortes_str)
+    _cache_analise[chave] = (agora, dados)
+    return dados
+
+
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(
     request: Request,
@@ -41,6 +56,27 @@ def dashboard(
     dados = _dados_cacheados(db, f, hoje=hoje)
 
     template = "partials/dashboard_paineis.html" if request.headers.get("HX-Request") else "dashboard.html"
+    return templates.TemplateResponse(template, {
+        "request": request,
+        "user": current_user,
+        "dados": dados,
+    })
+
+
+@router.get("/dashboard/analise", response_class=HTMLResponse)
+def dashboard_analise(
+    request: Request,
+    current_user: dict = Depends(require_login),
+    db: Session = Depends(get_db),
+):
+    hoje = datetime.now(BRT).date()
+    q = dict(request.query_params)
+    f = FiltrosDashboard.from_query(q, hoje=hoje)
+    criterio = svc_analise.parse_criterio(q.get("criterio"))
+    cortes_str = svc_analise.cortes_canonico(q.get("cortes"))
+    dados = _dados_analise_cacheados(db, f, criterio=criterio, cortes_str=cortes_str)
+
+    template = "partials/analise_paineis.html" if request.headers.get("HX-Request") else "analise.html"
     return templates.TemplateResponse(template, {
         "request": request,
         "user": current_user,
