@@ -10,18 +10,6 @@
       <!-- Linha 1 — filtros principais -->
       <div class="flex flex-wrap items-center gap-2.5">
 
-        <!-- Segmento -->
-        <div class="flex-1 min-w-[160px]">
-          <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Segmento</label>
-          <select name="segmento"
-                  class="w-full rounded-lg bg-[#1a1a1a] border border-[#333] px-2.5 py-1.5 text-sm text-[#e5e5e5] focus:outline-none focus:border-orange-500 transition-colors">
-            <option value="">Todos os segmentos</option>
-            {% for atalho in atalhos %}
-            <option value="{{ atalho.segmento }}">{{ atalho.descricao }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
         <!-- Estado -->
         <div class="min-w-[110px]">
           <label class="block text-[10px] font-semibold text-[#666] mb-1 uppercase tracking-wider">Estado</label>

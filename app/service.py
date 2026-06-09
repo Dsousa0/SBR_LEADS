@@ -26,6 +26,10 @@ ATALHOS: list[dict] = [
 
 _ATALHOS_MAP: dict[str, list[str]] = {a["segmento"]: a["cnaes"] for a in ATALHOS}
 
+# Segmento fixo da aplicação: a base importada contém apenas farmácias e drogarias,
+# então a busca sempre filtra por esse segmento (o filtro saiu da UI).
+SEGMENTO_FIXO = "farmacia"
+
 PORTES: dict[str, str] = {
     "00": "Não informado",
     "01": "MEI",

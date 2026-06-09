@@ -13,7 +13,7 @@ from database import get_db, SessionLocal
 from pedido_mobile import SyncError, sincronizar, sync_em_andamento
 from routers.api import _UFS
 from schemas import BuscarRequest, Cnae, Municipio, UF
-from service import ATALHOS, buscar, buscar_para_mapa, buscar_stats, contar
+from service import SEGMENTO_FIXO, buscar, buscar_para_mapa, buscar_stats, contar
 
 LIMITE_MAPA = 5000
 
@@ -66,8 +66,7 @@ def busca(
     db: Session = Depends(get_db),
 ):
     ufs = [UF(sigla=s, nome=n) for s, n in _UFS]
-    atalhos_view = [{"segmento": a["segmento"], "descricao": a["descricao"]} for a in ATALHOS]
-    ctx = {"request": request, "user": current_user, "ufs": ufs, "atalhos": atalhos_view}
+    ctx = {"request": request, "user": current_user, "ufs": ufs}
 
     if not request.query_params:
         ctx["resultado"] = None
@@ -98,8 +97,7 @@ def mapa(
     db: Session = Depends(get_db),
 ):
     ufs = [UF(sigla=s, nome=n) for s, n in _UFS]
-    atalhos_view = [{"segmento": a["segmento"], "descricao": a["descricao"]} for a in ATALHOS]
-    ctx = {"request": request, "user": current_user, "ufs": ufs, "atalhos": atalhos_view}
+    ctx = {"request": request, "user": current_user, "ufs": ufs}
 
     if not request.query_params:
         return templates.TemplateResponse("mapa.html", ctx)
@@ -334,7 +332,7 @@ def _form_to_req(form, *, page: int = 1, page_size: int = 50) -> BuscarRequest:
     return BuscarRequest(
         uf=form.get("uf") or None,
         municipio_codigo=form.get("municipio_codigo") or None,
-        segmento=form.get("segmento") or None,
+        segmento=SEGMENTO_FIXO,
         cnaes=[c.strip() for c in cnaes_raw.split(",") if c.strip()] if cnaes_raw else None,
         apenas_ativas=form.get("apenas_ativas") == "true",
         porte=form.get("porte") or None,
