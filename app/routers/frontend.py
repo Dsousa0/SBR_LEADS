@@ -165,6 +165,7 @@ def sync_status(
 def municipios_options(
     request: Request,
     uf: str | None = None,
+    placeholder: str | None = None,
     current_user: dict = Depends(require_login),
     db: Session = Depends(get_db),
 ):
@@ -184,6 +185,7 @@ def municipios_options(
     return templates.TemplateResponse("partials/municipios_options.html", {
         "request": request,
         "municipios": municipios,
+        "placeholder": placeholder,
     })
 
 

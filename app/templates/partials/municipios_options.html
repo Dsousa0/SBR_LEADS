@@ -1,4 +1,4 @@
-<option value="">Todos os municípios</option>
+<option value="">{{ placeholder|default('Todos os municípios', true) }}</option>
 {% for m in municipios %}
 <option value="{{ m.codigo }}">{{ m.descricao }}</option>
 {% endfor %}

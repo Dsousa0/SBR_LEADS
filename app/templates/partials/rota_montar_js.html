@@ -38,6 +38,41 @@
     if (c) { p.lat = c.lat; p.lng = c.lon; }  // cache usa 'lon' (compat. com o Mapa); parada usa 'lng'
   }
 
+  // Geocodifica o CENTRO de uma cidade pelo nome (Photon/komoot, mesmo provedor do Mapa).
+  async function geocodeCidade(cidade, uf) {
+    if (!cidade) return null;
+    const q = [cidade, uf, 'Brasil'].filter(Boolean).join(', ');
+    const chave = 'pm2_cidade_' + q.toLowerCase();
+    const c = cacheGet(chave);
+    if (c !== null) return c.lat ? c : null;
+    try {
+      const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=1');
+      if (!r.ok) { cacheSet(chave, { lat: null }); return null; }
+      const d = await r.json();
+      const f = d.features && d.features[0];
+      if (!f || !f.geometry || !f.geometry.coordinates) { cacheSet(chave, { lat: null }); return null; }
+      const [lon, lat] = f.geometry.coordinates;
+      if (!isFinite(lat) || !isFinite(lon)) { cacheSet(chave, { lat: null }); return null; }
+      const coords = { lat: lat, lon: lon };
+      cacheSet(chave, coords);
+      return coords;
+    } catch (_) { return null; }
+  }
+
+  // Centraliza o mapa na cidade selecionada (acionado pelo "Carregar candidatos").
+  window.focarCidadeRota = async function () {
+    const sel = document.getElementById('f-municipio');
+    const cidade = sel && sel.selectedOptions.length ? sel.selectedOptions[0].text : '';
+    const uf = document.getElementById('f-uf').value;
+    if (!sel || !sel.value || !cidade) return;
+    desenharMapa();  // garante que o mapa exista
+    const c = await geocodeCidade(cidade, uf);
+    if (c && mapa) {
+      mapa.setView([c.lat, c.lon], 12);
+      setTimeout(() => mapa.invalidateSize(), 100);
+    }
+  };
+
   // ---------- render ----------
   function render() {
     document.getElementById('conta-paradas').textContent = paradas.length;
