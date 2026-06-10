@@ -106,6 +106,8 @@ def documentos_em_risco(db: Session, *, vendedor: str, hoje, dias_min: int = 30)
         FROM pedido_mobile_pedido ped
         LEFT JOIN cliente_pedido_mobile pm ON pm.documento = ped.cliente_documento
         WHERE COALESCE(NULLIF(TRIM(ped.vendedor), ''), '') = :vendedor
+          -- pm.inativo IS NULL cobre tanto prospectos genuínos quanto clientes inativos
+          -- (mesma regra do dashboard_service.clientes_risco).
           AND (pm.inativo = FALSE OR pm.inativo IS NULL)
         GROUP BY ped.cliente_documento
         HAVING (:hoje - MAX(ped.emissao)) >= :dias_min

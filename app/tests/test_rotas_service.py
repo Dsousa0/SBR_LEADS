@@ -110,7 +110,7 @@ from datetime import date
 from sqlalchemy import text
 
 
-def _seed_estab(db, *, doc, cnpj=("11111111", "0001", "11"), cnae="4771701",
+def _seed_estab(db, *, cnpj=("11111111", "0001", "1"), cnae="4771701",
                 municipio="2603900", uf="PE", cep="55000000", nome="Farmácia X"):
     db.execute(text("""
         INSERT INTO empresa (cnpj_basico, razao_social) VALUES (:b, :rs)
@@ -130,14 +130,14 @@ def _seed_estab(db, *, doc, cnpj=("11111111", "0001", "11"), cnae="4771701",
 
 
 def test_candidatos_traz_cliente_do_vendedor_e_prospecto(db):
-    # Cliente do João: basico "11111111" + ordem "0001" + dv "1" → documento "111111110001 1".
-    _seed_estab(db, doc="cli", cnpj=("11111111", "0001", "1"), nome="Cliente João")
+    # Cliente do João: basico "11111111" + ordem "0001" + dv "1" → documento "1111111100011".
+    _seed_estab(db, cnpj=("11111111", "0001", "1"), nome="Cliente João")
     db.execute(text("""
         INSERT INTO cliente_pedido_mobile (documento, vendedor, inativo)
         VALUES ('1111111100011', 'Joao', FALSE)
     """))
     # Prospecto (não-cliente) na mesma cidade.
-    _seed_estab(db, doc="pro", cnpj=("22222222", "0001", "2"), nome="Prospecto")
+    _seed_estab(db, cnpj=("22222222", "0001", "2"), nome="Prospecto")
 
     itens = svc.candidatos(db, vendedor="Joao", municipio_codigo="2603900", hoje=date(2026, 6, 10))
     por_doc = {i["documento"]: i for i in itens}
@@ -147,7 +147,7 @@ def test_candidatos_traz_cliente_do_vendedor_e_prospecto(db):
 
 
 def test_candidatos_nao_traz_cliente_de_outro_vendedor(db):
-    _seed_estab(db, doc="cli", cnpj=("33333333", "0001", "3"), nome="Cliente Maria")
+    _seed_estab(db, cnpj=("33333333", "0001", "3"), nome="Cliente Maria")
     db.execute(text("""
         INSERT INTO cliente_pedido_mobile (documento, vendedor, inativo)
         VALUES ('3333333300013', 'Maria', FALSE)
@@ -158,7 +158,7 @@ def test_candidatos_nao_traz_cliente_de_outro_vendedor(db):
 
 
 def test_candidatos_marca_em_risco(db):
-    _seed_estab(db, doc="cli", cnpj=("44444444", "0001", "4"), nome="Cliente Atrasado")
+    _seed_estab(db, cnpj=("44444444", "0001", "4"), nome="Cliente Atrasado")
     db.execute(text("""
         INSERT INTO cliente_pedido_mobile (documento, vendedor, inativo)
         VALUES ('4444444400014', 'Joao', FALSE)
@@ -177,9 +177,13 @@ def test_documentos_em_risco_respeita_limite_de_dias(db):
     db.execute(text("""
         INSERT INTO pedido_mobile_pedido (pedido_numero, cliente_documento, vendedor, emissao, total_liquido)
         VALUES
-            (801, 'doc_antigo', 'Joao', '2026-01-01', 100),
-            (802, 'doc_recente', 'Joao', '2026-06-09', 100)
+            (801, 'doc_antigo',   'Joao', '2026-01-01', 100),
+            (802, 'doc_recente',  'Joao', '2026-06-09', 100),
+            (803, 'doc_30dias',   'Joao', '2026-05-11', 100),
+            (804, 'doc_29dias',   'Joao', '2026-05-12', 100)
     """))
     risco = svc.documentos_em_risco(db, vendedor="Joao", hoje=date(2026, 6, 10))
-    assert "doc_antigo" in risco       # > 30 dias
-    assert "doc_recente" not in risco  # < 30 dias
+    assert "doc_antigo" in risco        # > 30 dias
+    assert "doc_recente" not in risco   # < 30 dias
+    assert "doc_30dias" in risco        # exatamente 30 dias -> em risco (>=)
+    assert "doc_29dias" not in risco    # 29 dias -> fora
