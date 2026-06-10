@@ -116,6 +116,36 @@ def _bootstrap_usuarios():
             CREATE INDEX IF NOT EXISTS idx_pm_item_pedido
             ON pedido_mobile_item(pedido_numero)
         """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS rota (
+                id             SERIAL PRIMARY KEY,
+                nome           TEXT NOT NULL,
+                vendedor       TEXT NOT NULL,
+                municipio      TEXT NOT NULL,
+                uf             TEXT NOT NULL,
+                criado_em      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS rota_parada (
+                id          SERIAL PRIMARY KEY,
+                rota_id     INTEGER NOT NULL REFERENCES rota(id) ON DELETE CASCADE,
+                ordem       INTEGER NOT NULL,
+                documento   TEXT NOT NULL,
+                nome_cache  TEXT NOT NULL,
+                eh_cliente  BOOLEAN NOT NULL DEFAULT FALSE,
+                cep_cache   TEXT,
+                lat_cache   DOUBLE PRECISION,
+                lng_cache   DOUBLE PRECISION
+            )
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_rota_parada_rota ON rota_parada(rota_id)
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_rota_vendedor ON rota(vendedor)
+        """))
         conn.commit()
 
         count = conn.execute(text("SELECT COUNT(*) FROM usuario")).scalar()

@@ -58,6 +58,51 @@ CREATE TABLE IF NOT EXISTS pedido_mobile_item (
     total_liquido     DECIMAL(12,2),
     informacoes_adicionais TEXT
 );
+CREATE TABLE IF NOT EXISTS rota (
+    id             SERIAL PRIMARY KEY,
+    nome           TEXT NOT NULL,
+    vendedor       TEXT NOT NULL,
+    municipio      TEXT NOT NULL,
+    uf             TEXT NOT NULL,
+    criado_em      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS rota_parada (
+    id          SERIAL PRIMARY KEY,
+    rota_id     INTEGER NOT NULL REFERENCES rota(id) ON DELETE CASCADE,
+    ordem       INTEGER NOT NULL,
+    documento   TEXT NOT NULL,
+    nome_cache  TEXT NOT NULL,
+    eh_cliente  BOOLEAN NOT NULL DEFAULT FALSE,
+    cep_cache   TEXT,
+    lat_cache   DOUBLE PRECISION,
+    lng_cache   DOUBLE PRECISION
+);
+CREATE TABLE IF NOT EXISTS empresa (
+    cnpj_basico   VARCHAR(8) PRIMARY KEY,
+    razao_social  VARCHAR(200),
+    porte         VARCHAR(2),
+    capital_social NUMERIC
+);
+CREATE TABLE IF NOT EXISTS municipio (
+    codigo    VARCHAR(7) PRIMARY KEY,
+    descricao VARCHAR(120)
+);
+CREATE TABLE IF NOT EXISTS estabelecimento (
+    cnpj_basico            VARCHAR(8),
+    cnpj_ordem             VARCHAR(4),
+    cnpj_dv                VARCHAR(2),
+    nome_fantasia          VARCHAR(200),
+    cnae_fiscal_principal  VARCHAR(7),
+    situacao_cadastral     VARCHAR(2),
+    cep                    VARCHAR(8),
+    tipo_logradouro        VARCHAR(40),
+    logradouro             VARCHAR(200),
+    numero                 VARCHAR(20),
+    bairro                 VARCHAR(100),
+    municipio              VARCHAR(7),
+    uf                     VARCHAR(2)
+);
 """
 
 
