@@ -1,0 +1,170 @@
+(function () {
+  const appEl = document.getElementById('rota-app');
+  if (!appEl) return;
+  const rotaSalva = JSON.parse(appEl.dataset.rota || 'null');
+
+  let paradas = [];          // [{documento, nome, eh_cliente, cep, lat, lng, logradouro,...}]
+  let partidaIdx = 0;
+
+  // ---------- geocode (reusa cache do Mapa) ----------
+  function cacheGet(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (_) { return null; } }
+  function cacheSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+
+  async function coordsPorCep(cep) {
+    const limpo = (cep || '').replace(/\D/g, '');
+    if (limpo.length !== 8) return null;
+    const chave = 'pm2_cep_' + limpo;
+    const c = cacheGet(chave);
+    if (c !== null) return c.lat ? c : null;
+    try {
+      const r = await fetch('https://cep.awesomeapi.com.br/json/' + limpo);
+      if (!r.ok) { cacheSet(chave, { lat: null }); return null; }
+      const d = await r.json();
+      if (!d.lat || !d.lng) { cacheSet(chave, { lat: null }); return null; }
+      const coords = { lat: parseFloat(d.lat), lng: parseFloat(d.lng) };
+      cacheSet(chave, coords);
+      return coords;
+    } catch (_) { return null; }
+  }
+
+  async function geocodeParada(p) {
+    if (p.lat != null && p.lng != null) return;
+    const c = await coordsPorCep(p.cep);
+    if (c) { p.lat = c.lat; p.lng = c.lng; }
+  }
+
+  // ---------- render ----------
+  function render() {
+    document.getElementById('conta-paradas').textContent = paradas.length;
+    const ul = document.getElementById('lista-rota');
+    ul.innerHTML = '';
+    paradas.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center gap-2 px-2 py-1.5 rounded bg-[#1c1c1c] border border-[#2a2a2a]';
+      li.dataset.documento = p.documento;
+      li.innerHTML =
+        '<span class="cursor-move text-[#555]">⠿</span>' +
+        '<span class="text-[#888] w-5 text-center">' + (i + 1) + '</span>' +
+        '<span class="flex-1 truncate text-[#ddd]">' + (i === partidaIdx ? '🏁 ' : '') + (p.nome || '') + '</span>' +
+        '<button class="text-[#666] hover:text-orange-500 text-xs" title="Definir como partida">↑</button>' +
+        '<button class="text-[#666] hover:text-red-400 text-xs" title="Remover">✕</button>';
+      const [, , , btnPart, btnRem] = li.children;
+      btnPart.onclick = () => { partidaIdx = i; render(); };
+      btnRem.onclick = () => { paradas.splice(i, 1); if (partidaIdx >= paradas.length) partidaIdx = 0; render(); desenharMapa(); };
+      ul.appendChild(li);
+    });
+    sincronizarChecks();
+  }
+
+  function sincronizarChecks() {
+    const docs = new Set(paradas.map(p => p.documento));
+    document.querySelectorAll('.cand-check').forEach(ch => { ch.checked = docs.has(ch.dataset.documento); });
+  }
+
+  // ---------- candidatos ----------
+  window.toggleCandidato = async function (ch) {
+    const doc = ch.dataset.documento;
+    const idx = paradas.findIndex(p => p.documento === doc);
+    if (idx >= 0) { paradas.splice(idx, 1); if (partidaIdx >= paradas.length) partidaIdx = 0; }
+    else {
+      const p = {
+        documento: doc, nome: ch.dataset.nome, cep: ch.dataset.cep,
+        eh_cliente: ch.dataset.ehCliente === '1', lat: null, lng: null,
+      };
+      await geocodeParada(p);
+      paradas.push(p);
+    }
+    render();
+    desenharMapa();
+  };
+
+  // ---------- mapa ----------
+  let mapa, camada;
+  function desenharMapa() {
+    if (!window.L) return;
+    if (!mapa) {
+      mapa = L.map('mapa').setView([-15.77, -47.93], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(mapa);
+    }
+    if (camada) mapa.removeLayer(camada);
+    camada = L.layerGroup().addTo(mapa);
+    const pts = [];
+    paradas.forEach((p, i) => {
+      if (p.lat == null || p.lng == null) return;
+      const icon = L.divIcon({
+        html: '<div style="background:#f97316;color:#fff;width:22px;height:22px;border-radius:50%;border:2px solid #fff;text-align:center;line-height:22px;font-size:11px;font-weight:700">' + (i + 1) + '</div>',
+        className: 'rota-pin', iconSize: [26, 26], iconAnchor: [13, 13],
+      });
+      L.marker([p.lat, p.lng], { icon }).addTo(camada);
+      pts.push([p.lat, p.lng]);
+    });
+    if (pts.length) {
+      L.polyline(pts, { color: '#f97316', weight: 2, opacity: 0.6 }).addTo(camada);
+      mapa.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+    }
+    setTimeout(() => mapa.invalidateSize(), 100);
+  }
+
+  // ---------- ações (backend) ----------
+  async function postJson(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return r.ok ? r.json() : null;
+  }
+
+  document.getElementById('btn-ordenar').onclick = async () => {
+    const d = await postJson('/rotas/ordenar', { partida_idx: partidaIdx, paradas });
+    if (d && d.paradas) { paradas = d.paradas; partidaIdx = 0; render(); desenharMapa(); }
+  };
+
+  document.getElementById('btn-maps').onclick = async () => {
+    const d = await postJson('/rotas/maps-urls', { paradas });
+    const cont = document.getElementById('trechos-maps');
+    cont.innerHTML = '';
+    if (!d || !d.trechos || !d.trechos.length) { cont.innerHTML = '<p class="text-xs text-[#666]">Adicione ao menos 2 paradas com endereço.</p>'; return; }
+    if (d.trechos.length === 1) { window.open(d.trechos[0], '_blank'); return; }
+    d.trechos.forEach((u, i) => {
+      const a = document.createElement('a');
+      a.href = u; a.target = '_blank';
+      a.className = 'block text-xs text-orange-500 hover:underline';
+      a.textContent = 'Abrir trecho ' + (i + 1);
+      cont.appendChild(a);
+    });
+  };
+
+  document.getElementById('btn-salvar').onclick = async () => {
+    const vendedor = document.getElementById('f-vendedor').value;
+    const uf = document.getElementById('f-uf').value.toUpperCase();
+    const municipio = document.getElementById('f-municipio').value;
+    if (!vendedor || !municipio || !paradas.length) { alert('Escolha vendedor, cidade e ao menos uma parada.'); return; }
+    const nome = prompt('Nome da rota:', (rotaSalva && rotaSalva.nome) || '');
+    if (!nome) return;
+    const body = { nome, vendedor, municipio, uf, paradas };
+    const url = rotaSalva ? '/rotas/' + rotaSalva.id : '/rotas';
+    const d = await postJson(url, body);
+    if (d && d.id) window.location.href = '/rotas';
+  };
+
+  // ---------- drag & drop ----------
+  if (window.Sortable) {
+    new Sortable(document.getElementById('lista-rota'), {
+      handle: '.cursor-move', animation: 150,
+      onEnd: () => {
+        const ordem = Array.from(document.getElementById('lista-rota').children).map(li => li.dataset.documento);
+        paradas.sort((a, b) => ordem.indexOf(a.documento) - ordem.indexOf(b.documento));
+        partidaIdx = 0;
+        render(); desenharMapa();
+      },
+    });
+  }
+
+  // ---------- init (rota salva) ----------
+  if (rotaSalva && rotaSalva.paradas) {
+    paradas = rotaSalva.paradas.map(p => ({
+      documento: p.documento, nome: p.nome, cep: p.cep,
+      eh_cliente: p.eh_cliente, lat: p.lat, lng: p.lng,
+    }));
+  }
+  render();
+  desenharMapa();
+})();
