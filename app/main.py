@@ -15,6 +15,7 @@ from routers.auth_router import router as auth_router
 from routers.dashboard import router as dashboard_router
 from routers.frontend import router as frontend_router
 from routers.navegacao import router as navegacao_router
+from routers.rotas import router as rotas_router
 
 
 def _bootstrap_usuarios():
@@ -200,6 +201,7 @@ app.include_router(admin_router)
 app.include_router(api_router)
 app.include_router(dashboard_router)
 app.include_router(navegacao_router)
+app.include_router(rotas_router)
 app.include_router(frontend_router)
 
 
