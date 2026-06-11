@@ -9,8 +9,8 @@ ainda é "normal" para ele.
 """
 from datetime import date
 
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy import text  # usado pelos helpers de banco (montar_recompra/opcoes_recompra)
+from sqlalchemy.orm import Session  # idem
 
 FAIXA_EM_DIA = "em_dia"
 FAIXA_ATRASANDO = "atrasando"

@@ -104,3 +104,12 @@ def test_mediana_zero_nao_quebra():
     assert r["mediana"] == 0.0
     assert r["indice"] == 5.0            # usa mediana mínima de 1 para o índice
     assert r["faixa"] == "atrasado"
+
+
+def test_sem_compras_retorna_sem_padrao():
+    r = svc.classificar_recompra([], date(2026, 3, 1))
+    assert r["faixa"] == "sem_padrao"
+    assert r["n_compras"] == 0
+    assert r["ultima_compra"] is None
+    assert r["dias_sem_comprar"] is None
+    assert r["ticket_medio"] == 0.0
