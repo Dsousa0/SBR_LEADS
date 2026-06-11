@@ -43,7 +43,7 @@
         <td class="px-3 py-2 text-[#ddd]">{{ c.nome }}{% if c.municipio %}<span class="text-[#666] text-xs"> · {{ c.municipio }}/{{ c.uf }}</span>{% endif %}</td>
         <td class="px-3 py-2 text-[#aaa]">{{ c.vendedor or '—' }}</td>
         <td class="px-3 py-2 text-right text-[#aaa]">{{ c.ultima_compra.strftime('%d/%m/%y') if c.ultima_compra else '—' }}</td>
-        <td class="px-3 py-2 text-right text-[#aaa]">{{ ('~%d d' % c.mediana) if c.mediana is not none else '—' }}</td>
+        <td class="px-3 py-2 text-right text-[#aaa]">{{ ('~%.0f d' % c.mediana) if c.mediana is not none else '—' }}</td>
         <td class="px-3 py-2 text-right text-[#aaa]">{{ c.dias_sem_comprar if c.dias_sem_comprar is not none else '—' }}</td>
         <td class="px-3 py-2 text-right font-semibold
             {% if c.faixa == 'atrasado' %}text-red-400{% elif c.faixa == 'atrasando' %}text-yellow-400{% elif c.faixa == 'em_dia' %}text-green-400{% else %}text-[#666]{% endif %}">

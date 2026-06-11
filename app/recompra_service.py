@@ -147,7 +147,7 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
         clientes.append(info)
 
     # Ordena por índice desc; "sem padrão" (índice None) sempre no fim.
-    clientes.sort(key=lambda c: (c["indice"] is not None, c["indice"] or 0.0), reverse=True)
+    clientes.sort(key=lambda c: (c["indice"] is not None, c["indice"] if c["indice"] is not None else 0.0), reverse=True)
 
     kpis = {
         "em_dia":    sum(1 for c in clientes if c["faixa"] == FAIXA_EM_DIA),
