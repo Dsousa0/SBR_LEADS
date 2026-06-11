@@ -51,8 +51,9 @@ def classificar_recompra(datas: list[date], hoje: date, *, receita_total: float 
 
     Devolve sempre: n_compras, ultima_compra, dias_sem_comprar, ticket_medio, faixa.
     Para >= MIN_COMPRAS adiciona mediana, maior_intervalo_normal e indice.
+    Datas repetidas (vários pedidos no mesmo dia) contam como uma única ocasião de compra.
     """
-    datas = sorted(datas)
+    datas = sorted(set(datas))  # dias distintos: vários pedidos no mesmo dia = uma compra
     n = len(datas)
     ultima = datas[-1] if n else None
     dias_sem_comprar = (hoje - ultima).days if ultima else None

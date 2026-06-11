@@ -99,12 +99,22 @@ def test_ticket_medio():
     assert r["ticket_medio"] == 300.0
 
 
-def test_mediana_zero_nao_quebra():
+def test_pedidos_no_mesmo_dia_contam_como_uma_compra():
+    # 3 "pedidos" em apenas 2 dias distintos -> 2 compras -> sem padrão (< 3)
     d = date(2026, 1, 1)
-    r = svc.classificar_recompra([d, d, d], d + timedelta(days=5), receita_total=300)
-    assert r["mediana"] == 0.0
-    assert r["indice"] == 5.0            # usa mediana mínima de 1 para o índice
-    assert r["faixa"] == "atrasado"
+    r = svc.classificar_recompra([d, d, d + timedelta(days=30)], date(2026, 3, 1), receita_total=300)
+    assert r["n_compras"] == 2
+    assert r["faixa"] == "sem_padrao"
+
+
+def test_dedup_dias_distintos_calcula_ritmo():
+    # 4 datas, mas 2 são no mesmo dia -> 3 dias distintos -> ritmo calculado sobre [30, 30]
+    base = date(2026, 1, 1)
+    datas = [base, base, base + timedelta(days=30), base + timedelta(days=60)]
+    r = svc.classificar_recompra(datas, base + timedelta(days=60 + 10), receita_total=900)
+    assert r["n_compras"] == 3            # 3 dias distintos (não 4 pedidos)
+    assert r["mediana"] == 30.0
+    assert r["ticket_medio"] == 300.0     # 900 / 3 ocasiões
 
 
 def test_sem_compras_retorna_sem_padrao():
