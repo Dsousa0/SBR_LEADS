@@ -99,9 +99,11 @@ _FILTRO_COMPRA = "ped.orcamento = FALSE AND ped.situacao IS DISTINCT FROM 'Cance
 
 
 def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
-                    uf: str | None, hoje) -> dict:
+                    uf: str | None, hoje: date) -> dict:
     """Agrega compras efetivas por cliente, classifica pelo ritmo individual e
-    devolve {clientes: [...ordenados...], kpis: {...}}."""
+    devolve {clientes: [...ordenados...], kpis: {...}}.
+
+    O KPI `receita_atrasados` soma o **ticket médio** (receita média por compra) dos clientes 🔴 — uma estimativa do faturamento por ciclo que está parado, não a receita histórica total."""
     cond = ["(pm.inativo = FALSE OR pm.inativo IS NULL)"]
     params: dict = {}
     if vendedor:
@@ -115,6 +117,7 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
         params["uf"] = uf
     where = " AND ".join(cond)
 
+    # Clientes sem nenhum pedido efetivo são naturalmente excluídos pelo JOIN.
     rows = db.execute(text(f"""
         SELECT
             pm.documento,
@@ -125,7 +128,9 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
         FROM cliente_pedido_mobile pm
         JOIN pedido_mobile_pedido ped ON ped.cliente_documento = pm.documento
         WHERE {where} AND {_FILTRO_COMPRA}
-        GROUP BY pm.documento, nome, pm.vendedor, pm.municipio, pm.uf
+        GROUP BY pm.documento,
+                 COALESCE(NULLIF(TRIM(pm.nome_fantasia), ''), pm.razao_social, pm.documento),
+                 pm.vendedor, pm.municipio, pm.uf
     """), params).fetchall()
 
     clientes = []

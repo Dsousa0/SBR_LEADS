@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import recompra_service as svc
+from sqlalchemy import text
 
 
 def _datas(inicio: date, *intervalos: int) -> list[date]:
@@ -117,8 +118,6 @@ def test_sem_compras_retorna_sem_padrao():
 
 # ---- helpers de banco ----
 
-from sqlalchemy import text
-
 
 def _cli(db, doc, vendedor="Joao", uf="PI", municipio="Floriano"):
     db.execute(text("""
@@ -193,3 +192,10 @@ def test_opcoes_recompra_lista_vendedores_e_locais(db):
     assert "Joao" in out["vendedores"]
     assert "PI" in out["ufs"]
     assert "Floriano" in out["cidades"]
+
+
+def test_montar_recompra_filtra_por_uf(db):
+    _cli(db, "G", vendedor="Joao", uf="SP", municipio="Sao Paulo")
+    _pedido(db, "G", date(2026, 1, 1))
+    dados = svc.montar_recompra(db, vendedor=None, cidade=None, uf="PI", hoje=date(2026, 2, 1))
+    assert all(c["documento"] != "G" for c in dados["clientes"])
