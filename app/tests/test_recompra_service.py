@@ -113,3 +113,83 @@ def test_sem_compras_retorna_sem_padrao():
     assert r["ultima_compra"] is None
     assert r["dias_sem_comprar"] is None
     assert r["ticket_medio"] == 0.0
+
+
+# ---- helpers de banco ----
+
+from sqlalchemy import text
+
+
+def _cli(db, doc, vendedor="Joao", uf="PI", municipio="Floriano"):
+    db.execute(text("""
+        INSERT INTO cliente_pedido_mobile (documento, razao_social, nome_fantasia, vendedor, inativo, municipio, uf)
+        VALUES (:d, :rs, :nf, :v, FALSE, :m, :uf)
+        ON CONFLICT (documento) DO UPDATE SET vendedor = EXCLUDED.vendedor
+    """), {"d": doc, "rs": f"Razao {doc}", "nf": f"Farmacia {doc}", "v": vendedor, "m": municipio, "uf": uf})
+
+
+_pedido_seq = [0]
+
+def _pedido(db, doc, emissao, *, total=100.0, orcamento=False, situacao="Enviado"):
+    _pedido_seq[0] += 1
+    db.execute(text("""
+        INSERT INTO pedido_mobile_pedido
+            (pedido_numero, cliente_documento, vendedor, emissao, situacao, orcamento, total_liquido)
+        VALUES (:n, :d, 'Joao', :e, :s, :o, :t)
+    """), {"n": _pedido_seq[0], "d": doc, "e": emissao, "s": situacao, "o": orcamento, "t": total})
+
+
+def test_montar_recompra_classifica_e_conta(db):
+    # Cliente A: 4 compras regulares (~30d), última há 70d -> atrasado.
+    _cli(db, "A")
+    base = date(2026, 1, 1)
+    for off in (0, 30, 60, 90):
+        _pedido(db, "A", base + timedelta(days=off), total=200)
+    hoje = base + timedelta(days=90 + 70)  # 70 dias após a última
+    dados = svc.montar_recompra(db, vendedor="Joao", cidade=None, uf=None, hoje=hoje)
+    a = next(c for c in dados["clientes"] if c["documento"] == "A")
+    assert a["faixa"] == "atrasado"
+    assert a["n_compras"] == 4
+    assert dados["kpis"]["atrasado"] >= 1
+    assert dados["kpis"]["receita_atrasados"] >= 200
+
+
+def test_montar_recompra_ignora_orcamento_e_cancelado(db):
+    _cli(db, "B")
+    base = date(2026, 1, 1)
+    _pedido(db, "B", base, total=100)
+    _pedido(db, "B", base + timedelta(days=30), total=100)
+    _pedido(db, "B", base + timedelta(days=60), total=100)
+    _pedido(db, "B", base + timedelta(days=70), total=100, orcamento=True)
+    _pedido(db, "B", base + timedelta(days=75), total=100, situacao="Cancelado")
+    dados = svc.montar_recompra(db, vendedor="Joao", cidade=None, uf=None, hoje=base + timedelta(days=80))
+    b = next(c for c in dados["clientes"] if c["documento"] == "B")
+    assert b["n_compras"] == 3   # só os efetivos
+
+
+def test_montar_recompra_sem_padrao_vai_para_o_fim(db):
+    _cli(db, "C")  # 1 compra só -> sem padrão
+    _pedido(db, "C", date(2026, 1, 1), total=50)
+    _cli(db, "D")  # 3 compras, atrasado
+    base = date(2026, 1, 1)
+    for off in (0, 30, 60):
+        _pedido(db, "D", base + timedelta(days=off), total=100)
+    dados = svc.montar_recompra(db, vendedor="Joao", cidade=None, uf=None, hoje=base + timedelta(days=200))
+    docs = [c["documento"] for c in dados["clientes"]]
+    assert docs.index("C") > docs.index("D")
+    assert dados["kpis"]["sem_padrao"] >= 1
+
+
+def test_montar_recompra_filtra_por_vendedor(db):
+    _cli(db, "E", vendedor="Maria")
+    _pedido(db, "E", date(2026, 1, 1))
+    dados = svc.montar_recompra(db, vendedor="Joao", cidade=None, uf=None, hoje=date(2026, 2, 1))
+    assert all(c["documento"] != "E" for c in dados["clientes"])
+
+
+def test_opcoes_recompra_lista_vendedores_e_locais(db):
+    _cli(db, "F", vendedor="Joao", uf="PI", municipio="Floriano")
+    out = svc.opcoes_recompra(db)
+    assert "Joao" in out["vendedores"]
+    assert "PI" in out["ufs"]
+    assert "Floriano" in out["cidades"]

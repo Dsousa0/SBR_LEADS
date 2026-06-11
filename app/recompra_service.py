@@ -91,3 +91,82 @@ def classificar_recompra(datas: list[date], hoje: date, *, receita_total: float 
         "faixa": faixa,
     })
     return resultado
+
+
+# ----------------------------------------------------------------- helpers de DB
+
+_FILTRO_COMPRA = "ped.orcamento = FALSE AND ped.situacao IS DISTINCT FROM 'Cancelado' AND ped.emissao IS NOT NULL"
+
+
+def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
+                    uf: str | None, hoje) -> dict:
+    """Agrega compras efetivas por cliente, classifica pelo ritmo individual e
+    devolve {clientes: [...ordenados...], kpis: {...}}."""
+    cond = ["(pm.inativo = FALSE OR pm.inativo IS NULL)"]
+    params: dict = {}
+    if vendedor:
+        cond.append("pm.vendedor = :vendedor")
+        params["vendedor"] = vendedor
+    if cidade:
+        cond.append("pm.municipio = :cidade")
+        params["cidade"] = cidade
+    if uf:
+        cond.append("pm.uf = :uf")
+        params["uf"] = uf
+    where = " AND ".join(cond)
+
+    rows = db.execute(text(f"""
+        SELECT
+            pm.documento,
+            COALESCE(NULLIF(TRIM(pm.nome_fantasia), ''), pm.razao_social, pm.documento) AS nome,
+            pm.vendedor, pm.municipio, pm.uf,
+            array_agg(ped.emissao ORDER BY ped.emissao)  AS datas,
+            COALESCE(SUM(ped.total_liquido), 0)          AS receita_total
+        FROM cliente_pedido_mobile pm
+        JOIN pedido_mobile_pedido ped ON ped.cliente_documento = pm.documento
+        WHERE {where} AND {_FILTRO_COMPRA}
+        GROUP BY pm.documento, nome, pm.vendedor, pm.municipio, pm.uf
+    """), params).fetchall()
+
+    clientes = []
+    for r in rows:
+        info = classificar_recompra(list(r.datas), hoje, receita_total=float(r.receita_total or 0))
+        info.update({
+            "documento": r.documento,
+            "nome": r.nome,
+            "vendedor": r.vendedor,
+            "municipio": r.municipio,
+            "uf": r.uf,
+        })
+        clientes.append(info)
+
+    # Ordena por índice desc; "sem padrão" (índice None) sempre no fim.
+    clientes.sort(key=lambda c: (c["indice"] is not None, c["indice"] or 0.0), reverse=True)
+
+    kpis = {
+        "em_dia":    sum(1 for c in clientes if c["faixa"] == FAIXA_EM_DIA),
+        "atrasando": sum(1 for c in clientes if c["faixa"] == FAIXA_ATRASANDO),
+        "atrasado":  sum(1 for c in clientes if c["faixa"] == FAIXA_ATRASADO),
+        "sem_padrao": sum(1 for c in clientes if c["faixa"] == FAIXA_SEM_PADRAO),
+        "receita_atrasados": round(
+            sum(c["ticket_medio"] for c in clientes if c["faixa"] == FAIXA_ATRASADO), 2
+        ),
+    }
+    return {"clientes": clientes, "kpis": kpis}
+
+
+def opcoes_recompra(db: Session) -> dict:
+    """Listas para os selects de filtro (vendedor, UF, cidade) — da base de clientes."""
+    vend = db.execute(text("""
+        SELECT DISTINCT TRIM(vendedor) AS v FROM cliente_pedido_mobile
+        WHERE NULLIF(TRIM(vendedor), '') IS NOT NULL ORDER BY v
+    """)).scalars().all()
+    ufs = db.execute(text("""
+        SELECT DISTINCT TRIM(uf) AS u FROM cliente_pedido_mobile
+        WHERE NULLIF(TRIM(uf), '') IS NOT NULL ORDER BY u
+    """)).scalars().all()
+    cidades = db.execute(text("""
+        SELECT DISTINCT TRIM(municipio) AS m FROM cliente_pedido_mobile
+        WHERE NULLIF(TRIM(municipio), '') IS NOT NULL ORDER BY m
+    """)).scalars().all()
+    return {"vendedores": list(vend), "ufs": list(ufs), "cidades": list(cidades)}
