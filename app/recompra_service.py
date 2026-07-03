@@ -96,7 +96,15 @@ def classificar_recompra(datas: list[date], hoje: date, *, receita_total: float 
 
 # ----------------------------------------------------------------- helpers de DB
 
-_FILTRO_COMPRA = "ped.orcamento = FALSE AND ped.situacao IS DISTINCT FROM 'Cancelado' AND ped.emissao IS NOT NULL"
+# "Compra efetiva" = mesma régua do resto do cockpit (dashboard_service._NAO_CANCELADO):
+# situação comparada sem sensibilidade a caixa/espaços, senão um 'CANCELADO' cru da
+# origem entraria como compra aqui e ficaria de fora nos outros dashboards.
+# Recompra ainda exige emissao NOT NULL — a matemática do ritmo depende da data.
+_FILTRO_COMPRA = (
+    "ped.orcamento = FALSE "
+    "AND UPPER(TRIM(COALESCE(ped.situacao, ''))) <> 'CANCELADO' "
+    "AND ped.emissao IS NOT NULL"
+)
 
 
 def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,

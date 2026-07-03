@@ -176,6 +176,21 @@ def test_montar_recompra_ignora_orcamento_e_cancelado(db):
     assert b["n_compras"] == 3   # só os efetivos
 
 
+def test_montar_recompra_cancelado_e_insensivel_a_caixa(db):
+    # A origem grava a situação crua; 'CANCELADO'/' Cancelado ' devem ser ignorados
+    # igual ao resto do cockpit (mesma régua de dashboard_service._NAO_CANCELADO).
+    _cli(db, "B2")
+    base = date(2026, 1, 1)
+    _pedido(db, "B2", base, total=100)
+    _pedido(db, "B2", base + timedelta(days=30), total=100)
+    _pedido(db, "B2", base + timedelta(days=60), total=100)
+    _pedido(db, "B2", base + timedelta(days=70), total=100, situacao="CANCELADO")
+    _pedido(db, "B2", base + timedelta(days=75), total=100, situacao=" Cancelado ")
+    dados = svc.montar_recompra(db, vendedor="Joao", cidade=None, uf=None, hoje=base + timedelta(days=80))
+    b = next(c for c in dados["clientes"] if c["documento"] == "B2")
+    assert b["n_compras"] == 3   # variações de caixa/espaço não contam como compra
+
+
 def test_montar_recompra_sem_padrao_vai_para_o_fim(db):
     _cli(db, "C")  # 1 compra só -> sem padrão
     _pedido(db, "C", date(2026, 1, 1), total=50)
