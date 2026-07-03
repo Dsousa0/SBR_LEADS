@@ -213,10 +213,34 @@ def test_montar_recompra_filtra_por_vendedor(db):
 
 def test_opcoes_recompra_lista_vendedores_e_locais(db):
     _cli(db, "F", vendedor="Joao", uf="PI", municipio="Floriano")
+    _pedido(db, "F", date(2026, 1, 1))  # precisa de compra efetiva p/ entrar no universo
     out = svc.opcoes_recompra(db)
     assert "Joao" in out["vendedores"]
     assert "PI" in out["ufs"]
     assert "Floriano" in out["cidades"]
+
+
+def test_opcoes_recompra_escopa_ao_universo_com_compra(db):
+    # Cliente sem compra efetiva não deve aparecer nas opções (evita escolha "morta").
+    _cli(db, "SEMPED", vendedor="Fantasma", uf="AC", municipio="Rio Branco")
+    _cli(db, "INAT", vendedor="Inativo", uf="AM", municipio="Manaus")
+    db.execute(text("UPDATE cliente_pedido_mobile SET inativo = TRUE WHERE documento = 'INAT'"))
+    _pedido(db, "INAT", date(2026, 1, 1))       # tem pedido, mas está inativo
+    out = svc.opcoes_recompra(db)
+    assert "Fantasma" not in out["vendedores"]  # sem pedido efetivo
+    assert "AC" not in out["ufs"]
+    assert "Inativo" not in out["vendedores"]   # inativo
+    assert "AM" not in out["ufs"]
+
+
+def test_montar_recompra_filtro_ignora_espacos_no_dado(db):
+    # Vendedor gravado com espaço à toa; a opção do select vem TRIM-ada ('Espaco').
+    _cli(db, "H", vendedor="Espaco ", uf="PI", municipio="Floriano")
+    _pedido(db, "H", date(2026, 1, 1))
+    out = svc.opcoes_recompra(db)
+    assert "Espaco" in out["vendedores"]         # opção sem o espaço
+    dados = svc.montar_recompra(db, vendedor="Espaco", cidade=None, uf=None, hoje=date(2026, 2, 1))
+    assert any(c["documento"] == "H" for c in dados["clientes"])  # filtro casa mesmo assim
 
 
 def test_montar_recompra_filtra_por_uf(db):

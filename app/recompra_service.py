@@ -106,6 +106,10 @@ _FILTRO_COMPRA = (
     "AND ped.emissao IS NOT NULL"
 )
 
+# Cliente elegível ao dashboard: não inativo. Universo dos resultados = clientes
+# ativos COM ao menos uma compra efetiva (o JOIN + _FILTRO_COMPRA cuidam do resto).
+_CLIENTE_ATIVO = "(pm.inativo = FALSE OR pm.inativo IS NULL)"
+
 
 def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
                     uf: str | None, hoje: date) -> dict:
@@ -113,16 +117,18 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
     devolve {clientes: [...ordenados...], kpis: {...}}.
 
     O KPI `receita_atrasados` soma o **ticket médio** (receita média por compra) dos clientes 🔴 — uma estimativa do faturamento por ciclo que está parado, não a receita histórica total."""
-    cond = ["(pm.inativo = FALSE OR pm.inativo IS NULL)"]
+    # Compara com TRIM nos dois lados: as opções dos selects vêm TRIM-adas, então
+    # um valor gravado com espaço à toa ('SP ') ainda casa com a opção ('SP').
+    cond = [_CLIENTE_ATIVO]
     params: dict = {}
     if vendedor:
-        cond.append("pm.vendedor = :vendedor")
+        cond.append("TRIM(pm.vendedor) = :vendedor")
         params["vendedor"] = vendedor
     if cidade:
-        cond.append("pm.municipio = :cidade")
+        cond.append("TRIM(pm.municipio) = :cidade")
         params["cidade"] = cidade
     if uf:
-        cond.append("pm.uf = :uf")
+        cond.append("TRIM(pm.uf) = :uf")
         params["uf"] = uf
     where = " AND ".join(cond)
 
@@ -178,17 +184,24 @@ def calcular_kpis(clientes: list[dict]) -> dict:
 
 
 def opcoes_recompra(db: Session) -> dict:
-    """Listas para os selects de filtro (vendedor, UF, cidade) — da base de clientes."""
-    vend = db.execute(text("""
-        SELECT DISTINCT TRIM(vendedor) AS v FROM cliente_pedido_mobile
-        WHERE NULLIF(TRIM(vendedor), '') IS NOT NULL ORDER BY v
-    """)).scalars().all()
-    ufs = db.execute(text("""
-        SELECT DISTINCT TRIM(uf) AS u FROM cliente_pedido_mobile
-        WHERE NULLIF(TRIM(uf), '') IS NOT NULL ORDER BY u
-    """)).scalars().all()
-    cidades = db.execute(text("""
-        SELECT DISTINCT TRIM(municipio) AS m FROM cliente_pedido_mobile
-        WHERE NULLIF(TRIM(municipio), '') IS NOT NULL ORDER BY m
-    """)).scalars().all()
-    return {"vendedores": list(vend), "ufs": list(ufs), "cidades": list(cidades)}
+    """Listas para os selects de filtro (vendedor, UF, cidade).
+
+    Escopadas ao MESMO universo dos resultados — clientes ativos com ao menos
+    uma compra efetiva — para que nenhuma opção do dropdown leve a um recorte
+    vazio. Valores são TRIM-ados (casam com a comparação TRIM de montar_recompra).
+    """
+    def _distintos(coluna: str) -> list[str]:
+        return db.execute(text(f"""
+            SELECT DISTINCT TRIM(pm.{coluna}) AS x
+            FROM cliente_pedido_mobile pm
+            JOIN pedido_mobile_pedido ped ON ped.cliente_documento = pm.documento
+            WHERE {_CLIENTE_ATIVO} AND {_FILTRO_COMPRA}
+              AND NULLIF(TRIM(pm.{coluna}), '') IS NOT NULL
+            ORDER BY x
+        """)).scalars().all()
+
+    return {
+        "vendedores": _distintos("vendedor"),
+        "ufs": _distintos("uf"),
+        "cidades": _distintos("municipio"),
+    }
