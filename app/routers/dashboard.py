@@ -120,7 +120,9 @@ def dashboard_recompra(
     ctx = {
         "request": request,
         "user": current_user,
-        "kpis": dados["kpis"],
+        # KPIs seguem o mesmo recorte da tabela: com faixa selecionada, os cards
+        # refletem só o conjunto filtrado. Sem faixa, equivale a dados["kpis"].
+        "kpis": svc_recompra.calcular_kpis(clientes),
         "clientes": clientes,
     }
 

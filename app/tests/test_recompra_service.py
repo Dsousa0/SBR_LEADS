@@ -224,3 +224,29 @@ def test_montar_recompra_filtra_por_uf(db):
     _pedido(db, "G", date(2026, 1, 1))
     dados = svc.montar_recompra(db, vendedor=None, cidade=None, uf="PI", hoje=date(2026, 2, 1))
     assert all(c["documento"] != "G" for c in dados["clientes"])
+
+
+# ---- calcular_kpis (KPIs seguem o recorte da lista dada) ----
+
+
+def test_calcular_kpis_conta_por_faixa():
+    clientes = [
+        {"faixa": "em_dia", "ticket_medio": 100},
+        {"faixa": "atrasado", "ticket_medio": 200},
+        {"faixa": "atrasado", "ticket_medio": 50},
+        {"faixa": "sem_padrao", "ticket_medio": 10},
+    ]
+    kpis = svc.calcular_kpis(clientes)
+    assert kpis["em_dia"] == 1
+    assert kpis["atrasado"] == 2
+    assert kpis["sem_padrao"] == 1
+    assert kpis["atrasando"] == 0
+    assert kpis["receita_atrasados"] == 250  # só ticket dos atrasados
+
+
+def test_calcular_kpis_lista_filtrada_zera_outras_faixas():
+    # Ao filtrar a tabela por 'atrasado', os KPIs refletem só esse conjunto.
+    so_atrasados = [{"faixa": "atrasado", "ticket_medio": 300}]
+    kpis = svc.calcular_kpis(so_atrasados)
+    assert kpis == {"em_dia": 0, "atrasando": 0, "atrasado": 1,
+                    "sem_padrao": 0, "receita_atrasados": 300}

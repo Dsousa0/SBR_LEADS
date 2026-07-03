@@ -157,7 +157,16 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
     # Ordena por índice desc; "sem padrão" (índice None) sempre no fim.
     clientes.sort(key=lambda c: (c["indice"] is not None, c["indice"] if c["indice"] is not None else 0.0), reverse=True)
 
-    kpis = {
+    return {"clientes": clientes, "kpis": calcular_kpis(clientes)}
+
+
+def calcular_kpis(clientes: list[dict]) -> dict:
+    """Contagem por faixa + receita dos atrasados sobre a lista dada.
+
+    Recebe a lista já no recorte desejado — quando a tela filtra por faixa, os
+    KPIs devem refletir o mesmo conjunto exibido na tabela (não o total geral).
+    """
+    return {
         "em_dia":    sum(1 for c in clientes if c["faixa"] == FAIXA_EM_DIA),
         "atrasando": sum(1 for c in clientes if c["faixa"] == FAIXA_ATRASANDO),
         "atrasado":  sum(1 for c in clientes if c["faixa"] == FAIXA_ATRASADO),
@@ -166,7 +175,6 @@ def montar_recompra(db: Session, *, vendedor: str | None, cidade: str | None,
             sum(c["ticket_medio"] for c in clientes if c["faixa"] == FAIXA_ATRASADO), 2
         ),
     }
-    return {"clientes": clientes, "kpis": kpis}
 
 
 def opcoes_recompra(db: Session) -> dict:
