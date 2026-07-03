@@ -122,8 +122,14 @@ def dashboard_recompra(
         "user": current_user,
         "kpis": dados["kpis"],
         "clientes": clientes,
-        "opcoes": svc_recompra.opcoes_recompra(db),
-        "filtros": {"vendedor": vendedor or "", "cidade": cidade or "", "uf": uf or "", "faixa": faixa},
     }
-    template = "partials/recompra_paineis.html" if request.headers.get("HX-Request") else "recompra.html"
-    return templates.TemplateResponse(template, ctx)
+
+    # Troca de filtro é HX-Request e só re-renderiza #recompra-paineis (KPIs + tabela);
+    # o formulário de selects não volta, então evitamos os 3 SELECT DISTINCT de opcoes
+    # que seriam descartados. Elas só são necessárias no carregamento da página cheia.
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse("partials/recompra_paineis.html", ctx)
+
+    ctx["opcoes"] = svc_recompra.opcoes_recompra(db)
+    ctx["filtros"] = {"vendedor": vendedor or "", "cidade": cidade or "", "uf": uf or "", "faixa": faixa}
+    return templates.TemplateResponse("recompra.html", ctx)
