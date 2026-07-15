@@ -68,7 +68,7 @@
 
 ## Estado Atual do Projeto
 
-**Etapa em andamento:** Etapa 5 — Refinamento (segurança, performance, integrações)
+**Etapa em andamento:** Etapas 1–5 concluídas; em evolução contínua (dashboards do Cockpit Comercial e Rotas). Roadmap histórico em [`ETAPAS.md`](ETAPAS.md).
 
 **O que já está pronto:**
 
@@ -106,104 +106,22 @@
 - **Etapa 6 (infra)** — Deploy VPS Hostinger (Caddy + cron mensal + backup)
 - **Rotas de Visita — evoluções futuras** — login próprio de vendedor, histórico de visitas, autocomplete de município (hoje usa código IBGE)
 
-## Próximas Etapas
+## Roadmap
 
-### Etapa 2 — Importação da Base da Receita Federal
-
-**Objetivo:** Baixar, processar e importar a base completa do CNPJ no PostgreSQL local.
-
-**Passos a implementar:**
-
-1. Criar `etl/download.py` que baixa os arquivos mais recentes de https://arquivos.receitafederal.gov.br/CNPJ/dados_abertos_cnpj/ (são ~37 arquivos zip distribuídos em subpastas mensais)
-
-2. Criar `etl/schema.sql` com o schema oficial das tabelas:
-   - `empresa` (CNPJ básico, razão social, natureza jurídica, capital social, porte)
-   - `estabelecimento` (CNPJ ordem + DV, matriz/filial, nome fantasia, situação, endereço completo, telefones, e-mail, CNAE principal, CNAEs secundários)
-   - `socio` (sócios das empresas)
-   - `simples` (opção pelo Simples Nacional e MEI)
-   - `cnae` (tabela de referência: código + descrição)
-   - `municipio` (tabela IBGE: código + nome + UF)
-   - `pais`, `natureza_juridica`, `qualificacao_socio`, `motivo` (tabelas de domínio)
-
-3. Criar `etl/importer.py` que:
-   - Descompacta os ZIPs
-   - Usa `COPY FROM STDIN` (psycopg2) em vez de INSERT (10-100x mais rápido)
-   - Encoding ISO-8859-1 dos arquivos da Receita → converter para UTF-8
-   - Separador `;` e quote `"`
-   - Filtra apenas estabelecimentos ativos (situacao_cadastral = '02') por padrão (configurável)
-
-4. Criar índices essenciais:
-   ```sql
-   CREATE INDEX idx_estab_uf_municipio ON estabelecimento(uf, municipio);
-   CREATE INDEX idx_estab_cnae_principal ON estabelecimento(cnae_fiscal_principal);
-   CREATE INDEX idx_estab_situacao ON estabelecimento(situacao_cadastral);
-   CREATE INDEX idx_estab_cnpj_basico ON estabelecimento(cnpj_basico);
-   CREATE INDEX idx_empresa_cnpj_basico ON empresa(cnpj_basico);
-   ```
-
-5. Criar `etl/update_monthly.py` para atualização incremental (rodar via cron mensalmente)
-
-6. Implementar logs detalhados (qual arquivo está processando, quantos registros já inseriu, ETA)
-
-**Referências de implementação:**
-- Repositório de referência: https://github.com/aphonsoar/Receita_Federal_do_Brasil_-_Dados_Publicos_CNPJ
-- Layout oficial dos arquivos: https://www.gov.br/receitafederal/dados/cnpj-metadados.pdf
-
-### Etapa 3 — Backend Completo
-
-**Endpoints a criar:**
-
-- `GET /api/ufs` → lista de UFs (estática)
-- `GET /api/municipios?uf=PI` → municípios de uma UF
-- `GET /api/cnaes?q=farmacia` → autocomplete de CNAEs por descrição
-- `GET /api/cnaes/atalhos` → categorias pré-definidas (farmácias, restaurantes, etc.)
-- `POST /api/buscar` → recebe filtros (uf, municipio_id, cnae, situacao, porte, etc.) e retorna leads paginados
-- `GET /api/exportar?...` → mesma busca em CSV/XLSX
-
-**Dicionário de atalhos de CNAE (sugestão inicial):**
-```python
-ATALHOS_CNAE = {
-    "farmacia": ["4771701", "4771702", "4771703"],
-    "restaurante": ["5611201", "5611203", "5611204", "5611205"],
-    "oficina_mecanica": ["4520001", "4520002", "4520003", "4520004", "4520005"],
-    "supermercado": ["4711301", "4711302"],
-    "padaria": ["1091102", "4721102"],
-    "salao_beleza": ["9602501", "9602502"],
-    "academia": ["9313100"],
-    "clinica_medica": ["8630501", "8630502", "8630503"],
-    "advocacia": ["6911701"],
-    "contabilidade": ["6920601"],
-    # ... expandir conforme necessidade
-}
-```
-
-### Etapa 4 — Frontend
-
-- Página única (`/`) com tela de busca
-- Componentes: select UF, autocomplete cidade, atalhos CNAE + autocomplete CNAE
-- Resultados em duas abas: Tabela e Mapa
-- HTMX para atualização parcial sem reload
-- TailwindCSS para estilo
-- Leaflet para o mapa
-- Botão de exportar CSV/XLSX
-
-### Etapa 5 — Refinamento Local
-- Testes com cidades reais
-- Performance tuning das queries (EXPLAIN ANALYZE)
-- Tratamento de casos extremos (cidades sem resultados, CNAEs raros)
-- Melhoria de UX
+As Etapas 1–5 (setup, importação CNPJ, API REST, frontend, refinamento) estão **concluídas**
+— o detalhamento histórico de cada uma está em [`ETAPAS.md`](ETAPAS.md) e o desenho técnico
+em [`ARCHITECTURE.md`](ARCHITECTURE.md). As frentes ativas estão em **"Próximas frentes"**
+acima (Cross-sell, Cockpit Fase 3). A única etapa de roadmap ainda pendente:
 
 ### Etapa 6 — Deploy VPS Hostinger
-- Criar `docker-compose.prod.yml` com Caddy
-- Documentar processo de deploy via Git
-- Configurar cron para atualização mensal automatizada
-- Backup do banco
+- `docker-compose.prod.yml` + `Caddyfile` já existem (HTTPS automático via Let's Encrypt).
+- Falta: provisionar a VPS Hostinger, documentar o processo de deploy, configurar o cron
+  mensal (`etl/update_monthly.py`) e o backup automático do Postgres.
 
 ## Convenções do Projeto
 
 ### Git
-- Branch principal: `main`
-- Branches de feature: `feature/etapa-2-importacao`, `feature/etapa-3-api`, etc.
+- Branch principal: `main` — commits vão direto na `main` (sem branches intermediárias)
 - Commits em português, formato: `tipo: descrição curta`
   - `feat:` nova funcionalidade
   - `fix:` correção
